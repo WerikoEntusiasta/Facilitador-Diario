@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Plus,
@@ -11,10 +11,18 @@ import {
   FileDown,
   Pin,
   Check,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
+  Music,
+  Download,
+  Loader2,
+  ExternalLink,
 } from 'lucide-react';
-import { Note, Label, ChecklistItem } from '../types';
+import { Note, Label, ChecklistItem, NoteAttachment } from '../types';
 import { exportNoteToPdf } from '../lib/pdfExport';
 import { PRESET_COLORS, getNoteCardStyle } from '../lib/colors';
+import { apiUploadNoteAttachment } from '../lib/api';
 
 interface NoteEditorModalProps {
   isOpen: boolean;
@@ -31,9 +39,11 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
   onSave,
   allLabels,
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
+  const [attachments, setAttachments] = useState<NoteAttachment[]>([]);
   const [newChecklistText, setNewChecklistText] = useState('');
   const [color, setColor] = useState('#ffffff');
   const [isPinned, setIsPinned] = useState(false);
@@ -41,12 +51,14 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
   const [selectedLabelIds, setSelectedLabelIds] = useState<number[]>([]);
   const [isChecklistMode, setIsChecklistMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     if (note) {
       setTitle(note.title || '');
       setContent(note.content || '');
       setChecklist(note.checklist || []);
+      setAttachments(note.attachments || []);
       setColor(note.color || '#ffffff');
       setIsPinned(Boolean(note.is_pinned));
       setReminderDate(note.reminder_date || '');
@@ -56,6 +68,7 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
       setTitle('');
       setContent('');
       setChecklist([]);
+      setAttachments([]);
       setColor('#ffffff');
       setIsPinned(false);
       setReminderDate('');
@@ -65,6 +78,28 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
   }, [note, isOpen]);
 
   if (!isOpen) return null;
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const uploaded = await apiUploadNoteAttachment(files[i]);
+        setAttachments((prev) => [...prev, uploaded]);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Erro ao carregar anexo');
+    } finally {
+      setIsUploading(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
 
   const handleAddChecklistItem = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -103,6 +138,7 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
         title,
         content,
         checklist,
+        attachments,
         color,
         is_pinned: isPinned,
         reminder_date: reminderDate || null,
@@ -188,8 +224,8 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
             className="w-full text-xl font-bold bg-transparent border-none outline-none text-slate-800 dark:text-slate-100 placeholder:text-slate-400"
           />
 
-          {/* Toggle between Text and Checklist */}
-          <div className="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400">
+          {/* Action buttons (Checklist & File Attachment) */}
+          <div className="flex items-center gap-2 flex-wrap text-xs font-medium text-slate-600 dark:text-slate-400">
             <button
               type="button"
               onClick={() => setIsChecklistMode(!isChecklistMode)}
@@ -198,7 +234,91 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
               <CheckSquare size={14} />
               <span>{isChecklistMode ? 'Esconder Lista de Tarefas' : 'Adicionar Lista de Tarefas'}</span>
             </button>
+
+            <label className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/20 transition cursor-pointer font-semibold">
+              {isUploading ? (
+                <Loader2 size={14} className="animate-spin text-indigo-600" />
+              ) : (
+                <Paperclip size={14} />
+              )}
+              <span>{isUploading ? 'Anexando...' : 'Anexar Arquivo/Foto'}</span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleFileUpload}
+                disabled={isUploading}
+              />
+            </label>
           </div>
+
+          {/* Attachments Section */}
+          {attachments.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-black/10 dark:border-white/10">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                <span>Anexos ({attachments.length})</span>
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {attachments.map((att) => (
+                  <div
+                    key={att.id}
+                    className="group relative p-2 rounded-xl bg-black/5 dark:bg-white/5 border border-slate-200/60 dark:border-slate-700/60 flex items-center gap-2 overflow-hidden hover:bg-black/10 dark:hover:bg-white/10 transition"
+                  >
+                    {att.type === 'image' ? (
+                      <img
+                        src={att.url}
+                        alt={att.name}
+                        className="w-12 h-12 rounded-lg object-cover bg-slate-200 dark:bg-slate-800 shrink-0"
+                      />
+                    ) : att.type === 'pdf' ? (
+                      <div className="w-12 h-12 rounded-lg bg-red-500/15 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0 font-bold text-xs">
+                        PDF
+                      </div>
+                    ) : att.type === 'audio' ? (
+                      <div className="w-12 h-12 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                        <Music size={20} />
+                      </div>
+                    ) : (
+                      <div className="w-12 h-12 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                        <FileText size={20} />
+                      </div>
+                    )}
+
+                    <div className="flex-1 min-w-0 pr-6">
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate">
+                        {att.name}
+                      </p>
+                      {att.size && (
+                        <p className="text-[10px] text-slate-500">
+                          {(att.size / 1024).toFixed(1)} KB
+                        </p>
+                      )}
+                      <a
+                        href={att.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline mt-0.5"
+                      >
+                        <ExternalLink size={10} />
+                        Abrir / Baixar
+                      </a>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAttachment(att.id)}
+                      className="absolute top-2 right-2 p-1 text-slate-400 hover:text-red-500 rounded-lg transition hover:bg-black/10"
+                      title="Remover anexo"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Main Text Content */}
           <textarea

@@ -10,11 +10,22 @@ export interface ChecklistItem {
   completed: boolean;
 }
 
+export interface NoteAttachment {
+  id: string;
+  name: string;
+  url: string;
+  type: 'image' | 'pdf' | 'document' | 'audio' | 'other';
+  size?: number;
+  mimeType?: string;
+  created_at?: string;
+}
+
 export interface Note {
   id: number;
   title: string;
   content: string;
   checklist: ChecklistItem[];
+  attachments?: NoteAttachment[];
   color: string;
   is_pinned: boolean;
   is_archived: boolean;
@@ -137,6 +148,9 @@ export interface VaultItem {
   password: string;
   url?: string;
   notes?: string;
+  doc_type?: 'rg' | 'cpf' | 'cnh' | 'titulo_eleitor' | 'passaporte' | 'outro' | 'credential';
+  doc_data?: Record<string, string>;
+  attachments?: NoteAttachment[];
   created_at?: string;
   updated_at?: string;
 }

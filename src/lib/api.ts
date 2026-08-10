@@ -1,5 +1,6 @@
 import {
   Note,
+  NoteAttachment,
   Label,
   KanbanBoard,
   KanbanColumn,
@@ -101,6 +102,26 @@ export const apiTogglePinNote = (id: number) =>
 
 export const apiDeleteNotePermanently = (id: number) =>
   request<{ success: boolean; id: number }>(`/notes/${id}`, { method: 'DELETE' });
+
+export const apiUploadNoteAttachment = async (file: File): Promise<NoteAttachment> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  const token = localStorage.getItem('kb_auth_token');
+  const headers: Record<string, string> = {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const res = await fetch('/api/notes/attachments/upload', {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ error: 'Erro ao enviar anexo' }));
+    throw new Error(errData.error || `Erro HTTP ${res.status}`);
+  }
+  return res.json();
+};
 
 // KANBAN API
 export const apiGetBoards = () => request<KanbanBoard[]>('/boards');

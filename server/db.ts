@@ -86,6 +86,7 @@ function createSchema(db: Database) {
       title TEXT NOT NULL,
       content TEXT DEFAULT '',
       checklist TEXT DEFAULT '[]',
+      attachments TEXT DEFAULT '[]',
       color TEXT DEFAULT '#ffffff',
       is_pinned INTEGER DEFAULT 0,
       is_archived INTEGER DEFAULT 0,
@@ -175,18 +176,25 @@ function createSchema(db: Database) {
       password TEXT NOT NULL,
       url TEXT DEFAULT '',
       notes TEXT DEFAULT '',
+      doc_type TEXT DEFAULT 'credential',
+      doc_data TEXT DEFAULT '{}',
+      attachments TEXT DEFAULT '[]',
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
-  // Ensure user_id column exists on existing databases
+  // Ensure columns exist on existing databases
   safeAddColumn(db, 'labels', 'user_id INTEGER DEFAULT 1');
   safeAddColumn(db, 'notes', 'user_id INTEGER DEFAULT 1');
+  safeAddColumn(db, 'notes', "attachments TEXT DEFAULT '[]'");
   safeAddColumn(db, 'kanban_boards', 'user_id INTEGER DEFAULT 1');
   safeAddColumn(db, 'pdf_documents', 'user_id INTEGER DEFAULT 1');
   safeAddColumn(db, 'workouts', 'user_id INTEGER DEFAULT 1');
   safeAddColumn(db, 'vault_items', 'user_id INTEGER DEFAULT 1');
+  safeAddColumn(db, 'vault_items', "doc_type TEXT DEFAULT 'credential'");
+  safeAddColumn(db, 'vault_items', "doc_data TEXT DEFAULT '{}'");
+  safeAddColumn(db, 'vault_items', "attachments TEXT DEFAULT '[]'");
 
   // Seed default user if empty
   const userCheck = db.exec('SELECT COUNT(*) as count FROM users');

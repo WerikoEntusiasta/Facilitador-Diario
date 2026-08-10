@@ -35,6 +35,22 @@ const upload = multer({
   },
 });
 
+const attachmentStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname) || '';
+    cb(null, 'att-' + uniqueSuffix + ext);
+  },
+});
+
+const attachmentUpload = multer({
+  storage: attachmentStorage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+});
+
 /* =========================================================================
    AUTH & USER MANAGEMENT
    ========================================================================= */
@@ -206,6 +222,46 @@ router.delete('/labels/:id', (req, res) => {
    NOTES API (Keep Style)
    ========================================================================= */
 
+router.post('/notes/attachments/upload', attachmentUpload.single('file'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+    }
+    const { originalname, filename, size, mimetype } = req.file;
+    const url = `/uploads/${filename}`;
+    let type = 'other';
+
+    if (mimetype.startsWith('image/')) {
+      type = 'image';
+    } else if (mimetype === 'application/pdf' || originalname.toLowerCase().endsWith('.pdf')) {
+      type = 'pdf';
+    } else if (mimetype.startsWith('audio/')) {
+      type = 'audio';
+    } else if (
+      mimetype.includes('document') ||
+      mimetype.includes('text') ||
+      mimetype.includes('word') ||
+      mimetype.includes('sheet') ||
+      mimetype.includes('zip') ||
+      mimetype.includes('json')
+    ) {
+      type = 'document';
+    }
+
+    res.json({
+      id: `att-${Date.now()}-${Math.round(Math.random() * 1000)}`,
+      name: originalname,
+      url,
+      type,
+      size,
+      mimeType: mimetype,
+      created_at: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/notes', (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
@@ -224,8 +280,8 @@ router.get('/notes', (req, res) => {
     sql += ' ORDER BY is_pinned DESC, updated_at DESC';
     const notes = queryAll(sql, params);
 
-    // Attach labels to notes
-    const notesWithLabels = notes.map((note) => {
+    // Attach labels and parse JSON fields for notes
+    const notesWithDetails = notes.map((note) => {
       const labels = queryAll(
         'SELECT l.* FROM labels l JOIN note_labels nl ON l.id = nl.label_id WHERE nl.note_id = ?',
         [note.id]
@@ -236,17 +292,24 @@ router.get('/notes', (req, res) => {
       } catch (e) {
         parsedChecklist = [];
       }
+      let parsedAttachments = [];
+      try {
+        parsedAttachments = JSON.parse(note.attachments || '[]');
+      } catch (e) {
+        parsedAttachments = [];
+      }
       return {
         ...note,
         is_pinned: Boolean(note.is_pinned),
         is_archived: Boolean(note.is_archived),
         is_trashed: Boolean(note.is_trashed),
         checklist: parsedChecklist,
+        attachments: parsedAttachments,
         labels,
       };
     });
 
-    res.json(notesWithLabels);
+    res.json(notesWithDetails);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -255,13 +318,14 @@ router.get('/notes', (req, res) => {
 router.post('/notes', (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
-    const { title, content, checklist, color, is_pinned, reminder_date, labelIds } = req.body;
+    const { title, content, checklist, attachments, color, is_pinned, reminder_date, labelIds } = req.body;
     const checklistStr = JSON.stringify(checklist || []);
+    const attachmentsStr = JSON.stringify(attachments || []);
 
     const result = runQuery(
-      `INSERT INTO notes (user_id, title, content, checklist, color, is_pinned, reminder_date) 
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [userId, title || '', content || '', checklistStr, color || '#ffffff', is_pinned ? 1 : 0, reminder_date || null]
+      `INSERT INTO notes (user_id, title, content, checklist, attachments, color, is_pinned, reminder_date) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, title || '', content || '', checklistStr, attachmentsStr, color || '#ffffff', is_pinned ? 1 : 0, reminder_date || null]
     );
 
     const noteId = result.lastInsertRowid;
@@ -281,6 +345,7 @@ router.post('/notes', (req, res) => {
       is_archived: Boolean(created.is_archived),
       is_trashed: Boolean(created.is_trashed),
       checklist: checklist || [],
+      attachments: attachments || [],
       labels,
     });
   } catch (err: any) {
@@ -291,14 +356,15 @@ router.post('/notes', (req, res) => {
 router.put('/notes/:id', (req, res) => {
   try {
     const { id } = req.params;
-    const { title, content, checklist, color, is_pinned, is_archived, is_trashed, reminder_date, labelIds } = req.body;
+    const { title, content, checklist, attachments, color, is_pinned, is_archived, is_trashed, reminder_date, labelIds } = req.body;
 
     const checklistStr = JSON.stringify(checklist || []);
+    const attachmentsStr = JSON.stringify(attachments || []);
     const now = new Date().toISOString();
 
     runQuery(
       `UPDATE notes SET 
-        title = ?, content = ?, checklist = ?, color = ?, 
+        title = ?, content = ?, checklist = ?, attachments = ?, color = ?, 
         is_pinned = ?, is_archived = ?, is_trashed = ?, 
         reminder_date = ?, updated_at = ?
        WHERE id = ?`,
@@ -306,6 +372,7 @@ router.put('/notes/:id', (req, res) => {
         title || '',
         content || '',
         checklistStr,
+        attachmentsStr,
         color || '#ffffff',
         is_pinned ? 1 : 0,
         is_archived ? 1 : 0,
@@ -326,12 +393,20 @@ router.put('/notes/:id', (req, res) => {
     const updated = queryOne('SELECT * FROM notes WHERE id = ?', [id]);
     const labels = queryAll('SELECT l.* FROM labels l JOIN note_labels nl ON l.id = nl.label_id WHERE nl.note_id = ?', [id]);
 
+    let parsedAttachments = [];
+    try {
+      parsedAttachments = JSON.parse(updated.attachments || '[]');
+    } catch (e) {
+      parsedAttachments = attachments || [];
+    }
+
     res.json({
       ...updated,
       is_pinned: Boolean(updated.is_pinned),
       is_archived: Boolean(updated.is_archived),
       is_trashed: Boolean(updated.is_trashed),
       checklist: checklist || [],
+      attachments: parsedAttachments,
       labels,
     });
   } catch (err: any) {
@@ -1135,8 +1210,30 @@ router.get('/vault/items', (req, res) => {
   try {
     if (!verifyVaultPassword(req, res)) return;
     const userId = getUserIdFromReq(req);
-    const items = queryAll('SELECT * FROM vault_items WHERE user_id = ? ORDER BY app_name ASC', [userId]);
-    res.json(items);
+    const items = queryAll('SELECT * FROM vault_items WHERE user_id = ? ORDER BY created_at DESC', [userId]);
+
+    const formattedItems = items.map((item) => {
+      let docData = {};
+      try {
+        docData = JSON.parse(item.doc_data || '{}');
+      } catch (e) {
+        docData = {};
+      }
+      let attachments = [];
+      try {
+        attachments = JSON.parse(item.attachments || '[]');
+      } catch (e) {
+        attachments = [];
+      }
+      return {
+        ...item,
+        doc_type: item.doc_type || 'credential',
+        doc_data: docData,
+        attachments,
+      };
+    });
+
+    res.json(formattedItems);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1146,28 +1243,40 @@ router.post('/vault/items', (req, res) => {
   try {
     if (!verifyVaultPassword(req, res)) return;
     const userId = getUserIdFromReq(req);
-    const { app_name, category, username_email, password, url, notes } = req.body;
+    const { app_name, category, username_email, password, url, notes, doc_type, doc_data, attachments } = req.body;
 
-    if (!app_name || !username_email || !password) {
-      return res.status(400).json({ error: 'Nome do app, usuário/e-mail e senha são obrigatórios' });
+    if (!app_name) {
+      return res.status(400).json({ error: 'Nome do item ou documento é obrigatório' });
     }
 
+    const docTypeStr = doc_type || 'credential';
+    const docDataStr = JSON.stringify(doc_data || {});
+    const attachmentsStr = JSON.stringify(attachments || []);
+
     const result = runQuery(
-      `INSERT INTO vault_items (user_id, app_name, category, username_email, password, url, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO vault_items (user_id, app_name, category, username_email, password, url, notes, doc_type, doc_data, attachments)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         userId,
         app_name.trim(),
         category || 'Geral',
-        username_email.trim(),
-        password,
+        (username_email || '').trim(),
+        password || '',
         url || '',
         notes || '',
+        docTypeStr,
+        docDataStr,
+        attachmentsStr,
       ]
     );
 
     const created = queryOne('SELECT * FROM vault_items WHERE id = ?', [result.lastInsertRowid]);
-    res.json(created);
+    res.json({
+      ...created,
+      doc_type: created.doc_type || 'credential',
+      doc_data: doc_data || {},
+      attachments: attachments || [],
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1178,30 +1287,55 @@ router.put('/vault/items/:id', (req, res) => {
     if (!verifyVaultPassword(req, res)) return;
     const userId = getUserIdFromReq(req);
     const id = Number(req.params.id);
-    const { app_name, category, username_email, password, url, notes } = req.body;
+    const { app_name, category, username_email, password, url, notes, doc_type, doc_data, attachments } = req.body;
 
     const existing = queryOne('SELECT * FROM vault_items WHERE id = ? AND user_id = ?', [id, userId]);
     if (!existing) {
       return res.status(404).json({ error: 'Item não encontrado no cofre' });
     }
 
+    const docTypeStr = doc_type !== undefined ? doc_type : existing.doc_type || 'credential';
+    const docDataStr = doc_data !== undefined ? JSON.stringify(doc_data) : existing.doc_data || '{}';
+    const attachmentsStr = attachments !== undefined ? JSON.stringify(attachments) : existing.attachments || '[]';
+
     runQuery(
-      `UPDATE vault_items SET app_name = ?, category = ?, username_email = ?, password = ?, url = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+      `UPDATE vault_items SET app_name = ?, category = ?, username_email = ?, password = ?, url = ?, notes = ?, doc_type = ?, doc_data = ?, attachments = ?, updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND user_id = ?`,
       [
-        app_name || existing.app_name,
-        category || existing.category,
-        username_email || existing.username_email,
-        password || existing.password,
+        app_name !== undefined ? app_name : existing.app_name,
+        category !== undefined ? category : existing.category,
+        username_email !== undefined ? username_email : existing.username_email,
+        password !== undefined ? password : existing.password,
         url !== undefined ? url : existing.url,
         notes !== undefined ? notes : existing.notes,
+        docTypeStr,
+        docDataStr,
+        attachmentsStr,
         id,
         userId,
       ]
     );
 
     const updated = queryOne('SELECT * FROM vault_items WHERE id = ?', [id]);
-    res.json(updated);
+    let parsedDocData = {};
+    try {
+      parsedDocData = JSON.parse(updated.doc_data || '{}');
+    } catch (e) {
+      parsedDocData = doc_data || {};
+    }
+    let parsedAttachments = [];
+    try {
+      parsedAttachments = JSON.parse(updated.attachments || '[]');
+    } catch (e) {
+      parsedAttachments = attachments || [];
+    }
+
+    res.json({
+      ...updated,
+      doc_type: updated.doc_type || 'credential',
+      doc_data: parsedDocData,
+      attachments: parsedAttachments,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

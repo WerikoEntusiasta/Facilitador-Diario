@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Shield,
   ShieldCheck,
@@ -23,8 +23,19 @@ import {
   CreditCard,
   Smartphone,
   Info,
+  FileText,
+  Car,
+  CheckSquare,
+  Paperclip,
+  Loader2,
+  X,
+  FileCheck,
+  User,
+  Calendar,
+  MapPin,
+  Building,
 } from 'lucide-react';
-import { VaultItem } from '../types';
+import { VaultItem, NoteAttachment } from '../types';
 import {
   apiGetVaultStatus,
   apiSetupVaultMasterPassword,
@@ -33,10 +44,16 @@ import {
   apiCreateVaultItem,
   apiUpdateVaultItem,
   apiDeleteVaultItem,
+  apiUploadNoteAttachment,
 } from '../lib/api';
 
 const CATEGORIES = [
   { name: 'Todas', icon: Shield },
+  { name: 'Documentos', icon: FileText },
+  { name: 'RG', icon: FileText },
+  { name: 'CPF', icon: CreditCard },
+  { name: 'CNH', icon: Car },
+  { name: 'Título de Eleitor', icon: CheckSquare },
   { name: 'Redes Sociais', icon: Smartphone },
   { name: 'E-mails', icon: Mail },
   { name: 'Trabalho', icon: Briefcase },
@@ -64,6 +81,12 @@ export const VaultView: React.FC = () => {
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Partial<VaultItem> | null>(null);
+  const [entryKind, setEntryKind] = useState<'credential' | 'document'>('credential');
+  const [docType, setDocType] = useState<'rg' | 'cpf' | 'cnh' | 'titulo_eleitor' | 'passaporte' | 'outro'>('rg');
+  const [docFields, setDocFields] = useState<Record<string, string>>({});
+  const [docAttachments, setDocAttachments] = useState<NoteAttachment[]>([]);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Password Generator State
   const [showGenerator, setShowGenerator] = useState(false);
@@ -161,6 +184,7 @@ export const VaultView: React.FC = () => {
   };
 
   const handleCopyText = (text: string, label: string) => {
+    if (!text) return;
     navigator.clipboard.writeText(text);
     showToast(`📋 ${label} copiado para a área de transferência!`);
   };
@@ -183,36 +207,130 @@ export const VaultView: React.FC = () => {
     setGeneratedPass(res);
   };
 
-  const handleOpenModal = (item?: VaultItem) => {
+  const handleOpenModal = (item?: VaultItem, defaultKind: 'credential' | 'document' = 'credential') => {
     if (item) {
       setEditingItem(item);
+      const isDoc = item.doc_type && item.doc_type !== 'credential';
+      setEntryKind(isDoc ? 'document' : 'credential');
+      setDocType(isDoc ? (item.doc_type as any) : 'rg');
+      setDocFields(item.doc_data || {});
+      setDocAttachments(item.attachments || []);
     } else {
       setEditingItem({
-        app_name: '',
-        category: 'Geral',
+        app_name: defaultKind === 'document' ? 'Carteira de Identidade (RG)' : '',
+        category: defaultKind === 'document' ? 'RG' : 'Geral',
         username_email: '',
         password: '',
         url: '',
         notes: '',
+        doc_type: defaultKind === 'document' ? 'rg' : 'credential',
+        doc_data: {},
+        attachments: [],
       });
+      setEntryKind(defaultKind);
+      setDocType('rg');
+      setDocFields({});
+      setDocAttachments([]);
     }
     setIsModalOpen(true);
   };
 
+  const selectDocPreset = (type: 'rg' | 'cpf' | 'cnh' | 'titulo_eleitor' | 'passaporte' | 'outro') => {
+    setDocType(type);
+    let title = 'Documento Pessoal';
+    let cat = 'Documentos';
+
+    if (type === 'rg') {
+      title = 'Carteira de Identidade (RG)';
+      cat = 'RG';
+    } else if (type === 'cpf') {
+      title = 'Cadastro de Pessoa Física (CPF)';
+      cat = 'CPF';
+    } else if (type === 'cnh') {
+      title = 'Carteira de Motorista (CNH)';
+      cat = 'CNH';
+    } else if (type === 'titulo_eleitor') {
+      title = 'Título de Eleitor';
+      cat = 'Título de Eleitor';
+    } else if (type === 'passaporte') {
+      title = 'Passaporte';
+      cat = 'Documentos';
+    }
+
+    setEditingItem((prev) => ({
+      ...prev,
+      app_name: title,
+      category: cat,
+      doc_type: type,
+    }));
+  };
+
+  const handleVaultFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setIsUploadingDoc(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const uploaded = await apiUploadNoteAttachment(files[i]);
+        setDocAttachments((prev) => [...prev, uploaded]);
+      }
+      showToast('📎 Foto/Documento anexado!');
+    } catch (err: any) {
+      showToast(`Erro ao enviar foto: ${err.message}`);
+    } finally {
+      setIsUploadingDoc(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const handleSaveItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingItem?.app_name || !editingItem?.username_email || !editingItem?.password) {
-      showToast('⚠️ Preencha os campos obrigatórios (App, Usuário e Senha)');
+    if (!editingItem?.app_name) {
+      showToast('⚠️ Preencha o nome do aplicativo ou documento.');
       return;
+    }
+
+    const payload: Partial<VaultItem> = {
+      ...editingItem,
+      doc_type: entryKind === 'document' ? docType : 'credential',
+      doc_data: entryKind === 'document' ? docFields : {},
+      attachments: docAttachments,
+    };
+
+    if (entryKind === 'credential') {
+      if (!payload.username_email || !payload.password) {
+        showToast('⚠️ Para senhas, preencha Usuário/E-mail e Senha.');
+        return;
+      }
+    } else {
+      // Document fallback
+      const primaryNumber =
+        docFields.rg_number ||
+        docFields.cpf_number ||
+        docFields.cnh_number ||
+        docFields.titulo_number ||
+        docFields.passport_number ||
+        docFields.doc_number ||
+        payload.username_email ||
+        '';
+      payload.username_email = primaryNumber;
+
+      const secondaryDetail =
+        docFields.orgao_emissor ||
+        docFields.validade ||
+        docFields.data_nascimento ||
+        payload.password ||
+        '';
+      payload.password = secondaryDetail;
     }
 
     try {
       if (editingItem.id) {
-        await apiUpdateVaultItem(masterPassword, editingItem.id, editingItem);
-        showToast('✅ Credencial atualizada com sucesso!');
+        await apiUpdateVaultItem(masterPassword, editingItem.id, payload);
+        showToast('✅ Item atualizado no cofre!');
       } else {
-        await apiCreateVaultItem(masterPassword, editingItem);
-        showToast('✅ Nova credencial adicionada ao cofre!');
+        await apiCreateVaultItem(masterPassword, payload);
+        showToast('✅ Novo item salvo com sucesso no cofre!');
       }
       setIsModalOpen(false);
       setEditingItem(null);
@@ -223,10 +341,10 @@ export const VaultView: React.FC = () => {
   };
 
   const handleDeleteItem = async (id: number) => {
-    if (confirm('Tem certeza que deseja remover esta credencial do cofre?')) {
+    if (confirm('Tem certeza que deseja remover este item do cofre?')) {
       try {
         await apiDeleteVaultItem(masterPassword, id);
-        showToast('🗑️ Credencial removida.');
+        showToast('🗑️ Item removido.');
         await loadItems(masterPassword);
       } catch (err: any) {
         showToast(`Erro: ${err.message}`);
@@ -236,11 +354,19 @@ export const VaultView: React.FC = () => {
 
   // Filter items
   const filteredItems = items.filter((item) => {
-    const matchesCategory = selectedCategory === 'Todas' || item.category === selectedCategory;
+    const isDoc = item.doc_type && item.doc_type !== 'credential';
+    let matchesCategory = selectedCategory === 'Todas' || item.category === selectedCategory;
+    if (selectedCategory === 'Documentos') {
+      matchesCategory = Boolean(isDoc || item.category === 'RG' || item.category === 'CPF' || item.category === 'CNH' || item.category === 'Título de Eleitor');
+    }
+
+    const docStr = JSON.stringify(item.doc_data || {}).toLowerCase();
     const matchesQuery =
       item.app_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.username_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.notes && item.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+      (item.notes && item.notes.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      docStr.includes(searchQuery.toLowerCase());
+
     return matchesCategory && matchesQuery;
   });
 
@@ -259,10 +385,10 @@ export const VaultView: React.FC = () => {
               <ShieldCheck className="w-12 h-12" />
             </div>
             <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              Configurar Cofre de Senhas
+              Configurar Cofre de Senhas e Documentos
             </h1>
             <p className="text-sm text-slate-600 dark:text-slate-400 max-w-lg mx-auto">
-              Para proteger suas credenciais e logins com máxima segurança, defina uma <strong className="text-indigo-600 dark:text-indigo-400">Senha Mestra de no mínimo 16 caracteres</strong>.
+              Guarde suas senhas e documentos pessoais (RG, CPF, CNH, Título de Eleitor) com segurança total via <strong className="text-indigo-600 dark:text-indigo-400">Senha Mestra de no mínimo 16 caracteres</strong>.
             </p>
           </div>
 
@@ -328,7 +454,7 @@ export const VaultView: React.FC = () => {
             <div className="p-4 bg-indigo-50/50 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900/40 text-xs text-slate-600 dark:text-slate-400 flex items-start gap-3">
               <Info className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
               <div>
-                <strong>Atenção:</strong> Guarde bem esta senha de 16 caracteres em um local seguro. Ela é necessária para trancar e abrir seu cofre pessoal.
+                <strong>Atenção:</strong> Guarde bem esta senha de 16 caracteres. Ela é a chave para proteger e acessar suas senhas e documentos pessoais.
               </div>
             </div>
 
@@ -371,7 +497,7 @@ export const VaultView: React.FC = () => {
               Cofre Trancado
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Digite sua senha mestra de 16 caracteres para acessar seus e-mails e senhas guardados.
+              Digite sua senha mestra de 16 caracteres para acessar suas senhas e documentos.
             </p>
           </div>
 
@@ -426,7 +552,7 @@ export const VaultView: React.FC = () => {
           </form>
 
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400">
-            🔒 Proteção por algoritmo SHA-256 e SQLite local.
+            🔒 Proteção por criptografia SHA-256 e SQLite local.
           </div>
         </div>
       </div>
@@ -455,14 +581,14 @@ export const VaultView: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-black text-slate-900 dark:text-white">
-                Cofre de Senhas Guardadas
+                Cofre de Senhas & Documentos Pessoais
               </h1>
               <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
                 Aberto
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Gerencie seus e-mails, usuários e senhas de aplicativos protegidos pela sua Senha Mestra de 16 caracteres.
+              Cadastre e consulte RG, CPF, CNH, Título de Eleitor e senhas protegidos pela sua Senha Mestra de 16 caracteres.
             </p>
           </div>
         </div>
@@ -470,22 +596,19 @@ export const VaultView: React.FC = () => {
         {/* Action Controls */}
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <button
-            onClick={() => {
-              generateRandomPassword(16);
-              setShowGenerator(true);
-            }}
-            className="flex-1 md:flex-none px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-700 cursor-pointer"
+            onClick={() => handleOpenModal(undefined, 'document')}
+            className="flex-1 md:flex-none px-3.5 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition flex items-center justify-center gap-2 border border-emerald-500/20 cursor-pointer"
           >
-            <Sparkles size={15} className="text-indigo-500" />
-            <span>Gerador 16+ Chars</span>
+            <FileText size={16} />
+            <span>Cadastrar Documento</span>
           </button>
 
           <button
-            onClick={() => handleOpenModal()}
+            onClick={() => handleOpenModal(undefined, 'credential')}
             className="flex-1 md:flex-none px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition flex items-center justify-center gap-2 cursor-pointer"
           >
             <Plus size={16} />
-            <span>Nova Credencial</span>
+            <span>Nova Senha / App</span>
           </button>
 
           <button
@@ -508,7 +631,7 @@ export const VaultView: React.FC = () => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por app, e-mail ou nota..."
+            placeholder="Buscar por nome, número, RG, CPF, CNH..."
             className="w-full pl-10 pr-4 py-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none shadow-xs"
           />
         </div>
@@ -538,42 +661,81 @@ export const VaultView: React.FC = () => {
 
       {/* Items Grid */}
       {filteredItems.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-12 text-center border border-slate-200 dark:border-slate-800 space-y-3">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-12 text-center border border-slate-200 dark:border-slate-800 space-y-4">
           <Key className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto" />
           <h3 className="text-base font-bold text-slate-700 dark:text-slate-300">
-            Nenhuma credencial encontrada
+            Nenhum registro encontrado
           </h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             {searchQuery
               ? 'Nenhum item corresponde aos critérios de busca informados.'
-              : 'Seu cofre está vazio. Adicione suas senhas e logins de aplicativos para mantê-los organizados.'}
+              : 'Seu cofre está vazio. Você pode cadastrar suas senhas e seus documentos como RG, CPF, CNH e Título de Eleitor.'}
           </p>
-          <button
-            onClick={() => handleOpenModal()}
-            className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold inline-flex items-center gap-2 cursor-pointer mt-2"
-          >
-            <Plus size={15} />
-            <span>Adicionar Primeira Credencial</span>
-          </button>
+          <div className="flex items-center justify-center gap-2 pt-2">
+            <button
+              onClick={() => handleOpenModal(undefined, 'document')}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold inline-flex items-center gap-2 cursor-pointer shadow-md"
+            >
+              <FileText size={15} />
+              <span>Cadastrar RG / CPF / CNH</span>
+            </button>
+            <button
+              onClick={() => handleOpenModal(undefined, 'credential')}
+              className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold inline-flex items-center gap-2 cursor-pointer shadow-md"
+            >
+              <Plus size={15} />
+              <span>Cadastrar Senha</span>
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredItems.map((item) => {
             const isPassVisible = visiblePasswords[item.id] || false;
+            const isDocument = item.doc_type && item.doc_type !== 'credential';
+            const doc = item.doc_data || {};
 
             return (
               <div
                 key={item.id}
-                className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-slate-800 shadow-xs hover:shadow-md transition space-y-4 flex flex-col justify-between"
+                className={`bg-white dark:bg-slate-900 rounded-2xl p-5 border ${
+                  isDocument
+                    ? 'border-emerald-500/30 dark:border-emerald-500/20 bg-gradient-to-b from-emerald-500/5 to-transparent'
+                    : 'border-slate-200 dark:border-slate-800'
+                } shadow-xs hover:shadow-md transition space-y-4 flex flex-col justify-between`}
               >
-                {/* Header */}
+                {/* Card Header */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900">
-                      <Globe size={18} />
+                    <div
+                      className={`p-2.5 rounded-xl border ${
+                        item.doc_type === 'rg'
+                          ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                          : item.doc_type === 'cpf'
+                          ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                          : item.doc_type === 'cnh'
+                          ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                          : item.doc_type === 'titulo_eleitor'
+                          ? 'bg-purple-500/10 text-purple-600 border-purple-500/20'
+                          : isDocument
+                          ? 'bg-teal-500/10 text-teal-600 border-teal-500/20'
+                          : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 border-indigo-100 dark:border-indigo-900'
+                      }`}
+                    >
+                      {item.doc_type === 'cnh' ? (
+                        <Car size={20} />
+                      ) : item.doc_type === 'cpf' ? (
+                        <CreditCard size={20} />
+                      ) : item.doc_type === 'titulo_eleitor' ? (
+                        <CheckSquare size={20} />
+                      ) : isDocument ? (
+                        <FileText size={20} />
+                      ) : (
+                        <Globe size={20} />
+                      )}
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                         {item.app_name}
                       </h3>
                       <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
@@ -585,14 +747,14 @@ export const VaultView: React.FC = () => {
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => handleOpenModal(item)}
-                      className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg transition"
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg transition cursor-pointer"
                       title="Editar"
                     >
                       <Edit2 size={15} />
                     </button>
                     <button
                       onClick={() => handleDeleteItem(item.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition"
+                      className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg transition cursor-pointer"
                       title="Excluir"
                     >
                       <Trash2 size={15} />
@@ -600,52 +762,151 @@ export const VaultView: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Email / Username Field */}
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Usuário / E-mail
-                  </span>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-mono text-slate-800 dark:text-slate-200 truncate font-semibold">
-                      {item.username_email}
-                    </span>
-                    <button
-                      onClick={() => handleCopyText(item.username_email, 'E-mail')}
-                      className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md transition shrink-0 cursor-pointer"
-                      title="Copiar Usuário/E-mail"
-                    >
-                      <Copy size={14} />
-                    </button>
-                  </div>
-                </div>
+                {/* Body Details for Document vs Credential */}
+                {isDocument ? (
+                  <div className="space-y-2.5">
+                    {/* Main Document Number */}
+                    <div className="p-3 bg-emerald-500/10 dark:bg-emerald-950/30 rounded-xl border border-emerald-500/20 space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                        Número do Documento
+                      </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-mono font-bold text-slate-900 dark:text-white truncate">
+                          {item.username_email || 'Não informado'}
+                        </span>
+                        <button
+                          onClick={() => handleCopyText(item.username_email, 'Número do Documento')}
+                          className="p-1 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 rounded-md transition shrink-0 cursor-pointer"
+                          title="Copiar Número"
+                        >
+                          <Copy size={14} />
+                        </button>
+                      </div>
+                    </div>
 
-                {/* Password Field */}
-                <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                    Senha de Acesso
-                  </span>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-mono text-slate-800 dark:text-slate-200 truncate font-semibold">
-                      {isPassVisible ? item.password : '••••••••••••••••'}
-                    </span>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => togglePasswordVisibility(item.id)}
-                        className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md transition cursor-pointer"
-                        title={isPassVisible ? 'Ocultar Senha' : 'Mostrar Senha'}
-                      >
-                        {isPassVisible ? <EyeOff size={14} /> : <Eye size={14} />}
-                      </button>
-                      <button
-                        onClick={() => handleCopyText(item.password, 'Senha')}
-                        className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md transition cursor-pointer"
-                        title="Copiar Senha"
-                      >
-                        <Copy size={14} />
-                      </button>
+                    {/* Additional Doc Attributes Grid */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {doc.orgao_emissor && (
+                        <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60">
+                          <span className="block text-[9px] font-bold text-slate-400 uppercase">Órgão Emissor</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{doc.orgao_emissor}</span>
+                        </div>
+                      )}
+                      {doc.data_emissao && (
+                        <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60">
+                          <span className="block text-[9px] font-bold text-slate-400 uppercase">Emissão</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{doc.data_emissao}</span>
+                        </div>
+                      )}
+                      {doc.validade && (
+                        <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60">
+                          <span className="block text-[9px] font-bold text-slate-400 uppercase">Validade</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{doc.validade}</span>
+                        </div>
+                      )}
+                      {doc.categoria && (
+                        <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60">
+                          <span className="block text-[9px] font-bold text-slate-400 uppercase">Categoria CNH</span>
+                          <span className="font-semibold text-amber-600 dark:text-amber-400 font-mono">{doc.categoria}</span>
+                        </div>
+                      )}
+                      {doc.zona && (
+                        <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60">
+                          <span className="block text-[9px] font-bold text-slate-400 uppercase">Zona / Seção</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">
+                            Zona {doc.zona} - Seção {doc.secao || 'N/I'}
+                          </span>
+                        </div>
+                      )}
+                      {doc.data_nascimento && (
+                        <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60">
+                          <span className="block text-[9px] font-bold text-slate-400 uppercase">Nascimento</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{doc.data_nascimento}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-2">
+                    {/* Email / Username Field */}
+                    <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Usuário / E-mail
+                      </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-mono text-slate-800 dark:text-slate-200 truncate font-semibold">
+                          {item.username_email}
+                        </span>
+                        <button
+                          onClick={() => handleCopyText(item.username_email, 'E-mail')}
+                          className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md transition shrink-0 cursor-pointer"
+                          title="Copiar Usuário/E-mail"
+                        >
+                          <Copy size={14} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Password Field */}
+                    <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Senha de Acesso
+                      </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-mono text-slate-800 dark:text-slate-200 truncate font-semibold">
+                          {isPassVisible ? item.password : '••••••••••••••••'}
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => togglePasswordVisibility(item.id)}
+                            className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-md transition cursor-pointer"
+                            title={isPassVisible ? 'Ocultar Senha' : 'Mostrar Senha'}
+                          >
+                            {isPassVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                          <button
+                            onClick={() => handleCopyText(item.password, 'Senha')}
+                            className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-md transition cursor-pointer"
+                            title="Copiar Senha"
+                          >
+                            <Copy size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Attached Document Photos */}
+                {item.attachments && item.attachments.length > 0 && (
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 flex items-center gap-1">
+                      <Paperclip size={11} />
+                      <span>Fotos / Anexos ({item.attachments.length})</span>
+                    </span>
+                    <div className="flex items-center gap-2 overflow-x-auto py-1">
+                      {item.attachments.map((att) => (
+                        <a
+                          key={att.id}
+                          href={att.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="group relative flex items-center gap-1 p-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-500/10 border border-slate-200 dark:border-slate-700 transition shrink-0"
+                          title={`Abrir ${att.name}`}
+                        >
+                          {att.type === 'image' ? (
+                            <img src={att.url} alt={att.name} className="w-8 h-8 rounded object-cover" />
+                          ) : (
+                            <FileText size={16} className="text-emerald-600 dark:text-emerald-400 p-0.5" />
+                          )}
+                          <span className="text-[10px] font-medium max-w-[80px] truncate text-slate-700 dark:text-slate-300">
+                            {att.name}
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Optional URL & Notes */}
                 {(item.url || item.notes) && (
@@ -657,7 +918,7 @@ export const VaultView: React.FC = () => {
                         rel="noopener noreferrer"
                         className="text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-semibold truncate max-w-[200px]"
                       >
-                        <span>Acessar Site</span>
+                        <span>Link / Site</span>
                         <ExternalLink size={12} />
                       </a>
                     ) : (
@@ -665,7 +926,7 @@ export const VaultView: React.FC = () => {
                     )}
 
                     {item.notes && (
-                      <span className="truncate text-slate-400 italic max-w-[150px]" title={item.notes}>
+                      <span className="truncate text-slate-400 italic max-w-[180px]" title={item.notes}>
                         "{item.notes}"
                       </span>
                     )}
@@ -677,14 +938,24 @@ export const VaultView: React.FC = () => {
         </div>
       )}
 
-      {/* ================= MODAL: ADD / EDIT CREDENTIAL ================= */}
+      {/* ================= MODAL: ADD / EDIT CREDENTIAL OR DOCUMENT ================= */}
       {isModalOpen && editingItem && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl space-y-6 my-8">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl space-y-6 my-8">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Key className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                <span>{editingItem.id ? 'Editar Credencial' : 'Nova Credencial no Cofre'}</span>
+                {entryKind === 'document' ? (
+                  <FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <Key className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                )}
+                <span>
+                  {editingItem.id
+                    ? 'Editar Registro'
+                    : entryKind === 'document'
+                    ? 'Novo Documento no Cofre'
+                    : 'Nova Senha no Cofre'}
+                </span>
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -694,104 +965,483 @@ export const VaultView: React.FC = () => {
               </button>
             </div>
 
+            {/* Entry Kind Switcher Tabs */}
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-100 dark:bg-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setEntryKind('credential')}
+                className={`py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                  entryKind === 'credential'
+                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                <Key size={15} />
+                <span>Senha / Aplicativo</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEntryKind('document');
+                  selectDocPreset('rg');
+                }}
+                className={`py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer ${
+                  entryKind === 'document'
+                    ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                <FileText size={15} />
+                <span>Documento Pessoal</span>
+              </button>
+            </div>
+
             <form onSubmit={handleSaveItem} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* App Name */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Nome do App / Serviço *
-                  </label>
-                  <input
-                    type="text"
-                    value={editingItem.app_name || ''}
-                    onChange={(e) => setEditingItem({ ...editingItem, app_name: e.target.value })}
-                    placeholder="Ex: Netflix, Gmail, Work VPN"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                    required
-                  />
+              {/* DOCUMENT SPECIFIC FORM */}
+              {entryKind === 'document' ? (
+                <div className="space-y-4">
+                  {/* Preset Document Type Chips */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                      Tipo de Documento:
+                    </label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { id: 'rg', label: '🪪 RG' },
+                        { id: 'cpf', label: '💳 CPF' },
+                        { id: 'cnh', label: '🚗 CNH' },
+                        { id: 'titulo_eleitor', label: '🗳️ Título de Eleitor' },
+                        { id: 'passaporte', label: '🌐 Passaporte' },
+                        { id: 'outro', label: '📄 Outro' },
+                      ].map((chip) => (
+                        <button
+                          key={chip.id}
+                          type="button"
+                          onClick={() => selectDocPreset(chip.id as any)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                            docType === chip.id
+                              ? 'bg-emerald-600 text-white shadow-xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                          }`}
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Document Name / Title */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Nome / Descrição do Documento *
+                    </label>
+                    <input
+                      type="text"
+                      value={editingItem.app_name || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, app_name: e.target.value })}
+                      placeholder="Ex: Meu RG, CNH do João, CPF Titular"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none font-semibold"
+                      required
+                    />
+                  </div>
+
+                  {/* DYNAMIC FIELDS PER DOC TYPE */}
+                  {docType === 'rg' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-emerald-500/5 rounded-2xl border border-emerald-500/20">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Número do RG *
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.rg_number || ''}
+                          onChange={(e) => setDocFields({ ...docFields, rg_number: e.target.value })}
+                          placeholder="Ex: 12.345.678-9"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Órgão Emissor / UF
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.orgao_emissor || ''}
+                          onChange={(e) => setDocFields({ ...docFields, orgao_emissor: e.target.value })}
+                          placeholder="Ex: SSP/SP, DETRAN/RJ"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Data de Emissão
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.data_emissao || ''}
+                          onChange={(e) => setDocFields({ ...docFields, data_emissao: e.target.value })}
+                          placeholder="Ex: 15/05/2020"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Data de Nascimento
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.data_nascimento || ''}
+                          onChange={(e) => setDocFields({ ...docFields, data_nascimento: e.target.value })}
+                          placeholder="Ex: 01/01/1995"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {docType === 'cpf' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-blue-500/5 rounded-2xl border border-blue-500/20">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Número do CPF *
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.cpf_number || ''}
+                          onChange={(e) => setDocFields({ ...docFields, cpf_number: e.target.value })}
+                          placeholder="Ex: 123.456.789-00"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Data de Nascimento
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.data_nascimento || ''}
+                          onChange={(e) => setDocFields({ ...docFields, data_nascimento: e.target.value })}
+                          placeholder="Ex: 01/01/1995"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {docType === 'cnh' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-amber-500/5 rounded-2xl border border-amber-500/20">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Número do Registro CNH *
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.cnh_number || ''}
+                          onChange={(e) => setDocFields({ ...docFields, cnh_number: e.target.value })}
+                          placeholder="Ex: 01234567890"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Categoria CNH
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.categoria || ''}
+                          onChange={(e) => setDocFields({ ...docFields, categoria: e.target.value })}
+                          placeholder="Ex: B, AB, A, D"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono font-bold text-amber-600"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Data de Validade
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.validade || ''}
+                          onChange={(e) => setDocFields({ ...docFields, validade: e.target.value })}
+                          placeholder="Ex: 20/10/2030"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Órgão Emissor / UF
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.orgao_emissor || ''}
+                          onChange={(e) => setDocFields({ ...docFields, orgao_emissor: e.target.value })}
+                          placeholder="Ex: DETRAN/SP"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {docType === 'titulo_eleitor' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-purple-500/5 rounded-2xl border border-purple-500/20">
+                      <div className="sm:col-span-3">
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Número do Título de Eleitor *
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.titulo_number || ''}
+                          onChange={(e) => setDocFields({ ...docFields, titulo_number: e.target.value })}
+                          placeholder="Ex: 1234 5678 9012"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Zona
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.zona || ''}
+                          onChange={(e) => setDocFields({ ...docFields, zona: e.target.value })}
+                          placeholder="Ex: 001"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Seção
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.secao || ''}
+                          onChange={(e) => setDocFields({ ...docFields, secao: e.target.value })}
+                          placeholder="Ex: 0142"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Município / UF
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.municipio || ''}
+                          onChange={(e) => setDocFields({ ...docFields, municipio: e.target.value })}
+                          placeholder="Ex: São Paulo / SP"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {docType === 'passaporte' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-indigo-500/5 rounded-2xl border border-indigo-500/20">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Número do Passaporte *
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.passport_number || ''}
+                          onChange={(e) => setDocFields({ ...docFields, passport_number: e.target.value })}
+                          placeholder="Ex: AB123456"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Validade
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.validade || ''}
+                          onChange={(e) => setDocFields({ ...docFields, validade: e.target.value })}
+                          placeholder="Ex: 10/10/2032"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {docType === 'outro' && (
+                    <div className="p-3 bg-slate-500/5 rounded-2xl border border-slate-500/20 space-y-2">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
+                          Número / Identificador do Documento *
+                        </label>
+                        <input
+                          type="text"
+                          value={docFields.doc_number || ''}
+                          onChange={(e) => setDocFields({ ...docFields, doc_number: e.target.value })}
+                          placeholder="Ex: Nº do contrato, Matrícula, Certidão"
+                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                          required
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Attachment Section for Document Photo / PDF Scan */}
+                  <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <Paperclip size={14} className="text-emerald-600" />
+                        <span>Foto do Documento / Scan (Frente / Verso)</span>
+                      </label>
+                      <label className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 transition cursor-pointer text-xs font-bold flex items-center gap-1">
+                        {isUploadingDoc ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <Plus size={13} />
+                        )}
+                        <span>Anexar Foto</span>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          accept="image/*,.pdf"
+                          className="hidden"
+                          onChange={handleVaultFileUpload}
+                          disabled={isUploadingDoc}
+                        />
+                      </label>
+                    </div>
+
+                    {docAttachments.length > 0 && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {docAttachments.map((att) => (
+                          <div
+                            key={att.id}
+                            className="flex items-center justify-between p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {att.type === 'image' ? (
+                                <img src={att.url} alt={att.name} className="w-8 h-8 rounded object-cover shrink-0" />
+                              ) : (
+                                <FileText size={16} className="text-emerald-600 shrink-0" />
+                              )}
+                              <span className="truncate font-medium text-[11px]">{att.name}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setDocAttachments((prev) => prev.filter((a) => a.id !== att.id))}
+                              className="p-1 text-slate-400 hover:text-red-500 shrink-0"
+                            >
+                              <X size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
+              ) : (
+                /* CREDENTIAL FORM */
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* App Name */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Nome do App / Serviço *
+                      </label>
+                      <input
+                        type="text"
+                        value={editingItem.app_name || ''}
+                        onChange={(e) => setEditingItem({ ...editingItem, app_name: e.target.value })}
+                        placeholder="Ex: Netflix, Gmail, Work VPN"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                        required
+                      />
+                    </div>
 
-                {/* Category */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Categoria
-                  </label>
-                  <select
-                    value={editingItem.category || 'Geral'}
-                    onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                  >
-                    <option value="Geral">Geral</option>
-                    <option value="Redes Sociais">Redes Sociais</option>
-                    <option value="E-mails">E-mails</option>
-                    <option value="Trabalho">Trabalho</option>
-                    <option value="Finanças">Finanças</option>
-                  </select>
+                    {/* Category */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                        Categoria
+                      </label>
+                      <select
+                        value={editingItem.category || 'Geral'}
+                        onChange={(e) => setEditingItem({ ...editingItem, category: e.target.value })}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      >
+                        <option value="Geral">Geral</option>
+                        <option value="Redes Sociais">Redes Sociais</option>
+                        <option value="E-mails">E-mails</option>
+                        <option value="Trabalho">Trabalho</option>
+                        <option value="Finanças">Finanças</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Username / Email */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      E-mail ou Usuário *
+                    </label>
+                    <input
+                      type="text"
+                      value={editingItem.username_email || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, username_email: e.target.value })}
+                      placeholder="Ex: usuario@email.com ou @meu_user"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      required
+                    />
+                  </div>
+
+                  {/* Password */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Senha de Acesso *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
+                          let pass = '';
+                          for (let i = 0; i < 16; i++) {
+                            pass += charset.charAt(Math.floor(Math.random() * charset.length));
+                          }
+                          setEditingItem({ ...editingItem, password: pass });
+                          showToast('⚡ Senha forte de 16 caracteres gerada!');
+                        }}
+                        className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <Sparkles size={13} />
+                        <span>Gerar 16 Chars</span>
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      value={editingItem.password || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, password: e.target.value })}
+                      placeholder="Sua senha secreta do app"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      required
+                    />
+                  </div>
+
+                  {/* Optional URL */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      URL / Link do Aplicativo (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={editingItem.url || ''}
+                      onChange={(e) => setEditingItem({ ...editingItem, url: e.target.value })}
+                      placeholder="Ex: https://app.servico.com"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                    />
+                  </div>
                 </div>
-              </div>
-
-              {/* Username / Email */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  E-mail ou Usuário *
-                </label>
-                <input
-                  type="text"
-                  value={editingItem.username_email || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, username_email: e.target.value })}
-                  placeholder="Ex: usuario@email.com ou @meu_user"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                  required
-                />
-              </div>
-
-              {/* Password */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Senha de Acesso *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const charset = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*';
-                      let pass = '';
-                      for (let i = 0; i < 16; i++) {
-                        pass += charset.charAt(Math.floor(Math.random() * charset.length));
-                      }
-                      setEditingItem({ ...editingItem, password: pass });
-                      showToast('⚡ Senha forte de 16 caracteres gerada!');
-                    }}
-                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Sparkles size={13} />
-                    <span>Gerar 16 Chars</span>
-                  </button>
-                </div>
-
-                <input
-                  type="text"
-                  value={editingItem.password || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, password: e.target.value })}
-                  placeholder="Sua senha secreta do app"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                  required
-                />
-              </div>
-
-              {/* Optional URL */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  URL / Link do Aplicativo (Opcional)
-                </label>
-                <input
-                  type="text"
-                  value={editingItem.url || ''}
-                  onChange={(e) => setEditingItem({ ...editingItem, url: e.target.value })}
-                  placeholder="Ex: https://app.servico.com"
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                />
-              </div>
+              )}
 
               {/* Notes */}
               <div>
@@ -801,8 +1451,8 @@ export const VaultView: React.FC = () => {
                 <textarea
                   value={editingItem.notes || ''}
                   onChange={(e) => setEditingItem({ ...editingItem, notes: e.target.value })}
-                  placeholder="Perguntas de segurança, PIN secundário, observações..."
-                  rows={3}
+                  placeholder="Observações, filiação, respostas de segurança..."
+                  rows={2}
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none resize-none"
                 />
               </div>
@@ -817,7 +1467,11 @@ export const VaultView: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md transition cursor-pointer"
+                  className={`px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-md transition cursor-pointer ${
+                    entryKind === 'document'
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : 'bg-indigo-600 hover:bg-indigo-700'
+                  }`}
                 >
                   Salvar no Cofre
                 </button>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Plus,
   Grid,
@@ -10,10 +10,15 @@ import {
   Tag,
   Search,
   Filter,
+  Paperclip,
+  Loader2,
+  X,
+  FileText,
 } from 'lucide-react';
-import { Note, Label } from '../types';
+import { Note, Label, NoteAttachment } from '../types';
 import { NoteCard } from './NoteCard';
 import { PRESET_COLORS, getNoteCardStyle } from '../lib/colors';
+import { apiUploadNoteAttachment } from '../lib/api';
 
 interface KeepNotesProps {
   notes: Note[];
@@ -46,16 +51,37 @@ export const KeepNotes: React.FC<KeepNotesProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Quick creator state
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [attachments, setAttachments] = useState<NoteAttachment[]>([]);
   const [color, setColor] = useState('#ffffff');
   const [isPinned, setIsPinned] = useState(false);
   const [reminderDate, setReminderDate] = useState('');
   const [selectedLabelIds, setSelectedLabelIds] = useState<number[]>([]);
   const [isCreating, setIsCreating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const uploaded = await apiUploadNoteAttachment(files[i]);
+        setAttachments((prev) => [...prev, uploaded]);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Erro ao carregar anexo');
+    } finally {
+      setIsUploading(false);
+      if (e.target) e.target.value = '';
+    }
+  };
 
   const handleQuickCreate = async () => {
-    if (!title.trim() && !content.trim()) {
+    if (!title.trim() && !content.trim() && attachments.length === 0) {
       setIsExpanded(false);
       return;
     }
@@ -66,6 +92,7 @@ export const KeepNotes: React.FC<KeepNotesProps> = ({
         title: title.trim(),
         content: content.trim(),
         checklist: [],
+        attachments,
         color,
         is_pinned: isPinned,
         reminder_date: reminderDate || null,
@@ -75,6 +102,7 @@ export const KeepNotes: React.FC<KeepNotesProps> = ({
       // Reset form
       setTitle('');
       setContent('');
+      setAttachments([]);
       setColor('#ffffff');
       setIsPinned(false);
       setReminderDate('');
@@ -194,9 +222,53 @@ export const KeepNotes: React.FC<KeepNotesProps> = ({
                 className="w-full bg-transparent border-none outline-none text-slate-700 dark:text-slate-200 text-sm leading-relaxed placeholder:text-slate-400 resize-none"
               />
 
-              {/* Labels & Colors */}
+              {/* Attachments in quick editor */}
+              {attachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {attachments.map((att) => (
+                    <div
+                      key={att.id}
+                      className="relative flex items-center gap-1.5 p-1.5 rounded-lg bg-black/5 dark:bg-white/10 text-xs"
+                    >
+                      {att.type === 'image' ? (
+                        <img src={att.url} alt={att.name} className="w-6 h-6 rounded object-cover" />
+                      ) : (
+                        <FileText size={14} className="text-indigo-600" />
+                      )}
+                      <span className="max-w-[100px] truncate text-[11px] font-medium">{att.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setAttachments((prev) => prev.filter((a) => a.id !== att.id))}
+                        className="p-0.5 text-slate-400 hover:text-red-500 rounded"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Labels, Colors & Attachments */}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-black/10 dark:border-white/10">
                 <div className="flex items-center gap-1.5 flex-wrap">
+                  {/* Attach button */}
+                  <label className="p-1.5 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer flex items-center gap-1 text-xs font-semibold">
+                    {isUploading ? (
+                      <Loader2 size={16} className="animate-spin text-indigo-600" />
+                    ) : (
+                      <Paperclip size={16} />
+                    )}
+                    <span className="hidden sm:inline">Anexar</span>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={handleFileUpload}
+                      disabled={isUploading}
+                    />
+                  </label>
+
                   {/* Preset colors */}
                   {[
                     '#ffffff',

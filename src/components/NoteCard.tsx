@@ -11,6 +11,9 @@ import {
   Tag,
   Palette,
   Edit3,
+  Paperclip,
+  FileText,
+  ExternalLink,
 } from 'lucide-react';
 import { Note, Label, ChecklistItem } from '../types';
 import { exportNoteToPdf } from '../lib/pdfExport';
@@ -130,6 +133,51 @@ export const NoteCard: React.FC<NoteCardProps> = ({
               <div className="text-[11px] text-slate-500 font-medium pt-1">
                 + {note.checklist.length - 8} itens adicionais...
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Attachments Preview */}
+        {note.attachments && note.attachments.length > 0 && (
+          <div className="my-3 space-y-1.5">
+            <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+              <Paperclip size={12} />
+              <span>Anexos ({note.attachments.length})</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1.5">
+              {note.attachments.slice(0, 4).map((att) => (
+                <a
+                  key={att.id}
+                  href={att.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1.5 p-1.5 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 transition overflow-hidden group/att"
+                  title={`${att.name} (Clique para abrir)`}
+                >
+                  {att.type === 'image' ? (
+                    <img src={att.url} alt={att.name} className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-lg bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
+                      <FileText size={16} />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-medium text-slate-800 dark:text-slate-200 truncate">
+                      {att.name}
+                    </p>
+                    <span className="text-[9px] text-indigo-600 dark:text-indigo-400 font-semibold group-hover/att:underline">
+                      Abrir
+                    </span>
+                  </div>
+                </a>
+              ))}
+            </div>
+            {note.attachments.length > 4 && (
+              <p className="text-[10px] text-slate-500 font-medium">
+                + {note.attachments.length - 4} outros anexos
+              </p>
             )}
           </div>
         )}
