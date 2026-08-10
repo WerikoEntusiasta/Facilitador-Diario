@@ -5,8 +5,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: werikplaystore/keepboard:latest
-    container_name: keepboard-app
+    image: werikoliveira/facilitadordiario:latest
+    container_name: facilitadordiario-app
     restart: unless-stopped
     ports:
       - "3000:3000"

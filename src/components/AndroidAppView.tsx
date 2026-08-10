@@ -304,13 +304,27 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
               <div className="p-3 bg-slate-950 rounded-lg text-[11px] font-mono text-cyan-300 overflow-x-auto space-y-1 border border-slate-800">
                 <p># 1. Autenticar no Docker Hub</p>
                 <p className="text-white">docker login</p>
-                <p className="mt-1"># 2. Compilar a imagem Docker com tag</p>
-                <p className="text-white">docker build -t werikplaystore/keepboard:latest .</p>
+                <p className="mt-1"># 2. Compilar a imagem Docker com a sua tag</p>
+                <p className="text-white">docker build -t werikoliveira/facilitadordiario:latest -t werikoliveira/facilitadordiario:tagname .</p>
                 <p className="mt-1"># 3. Enviar para o repositório no Docker Hub</p>
-                <p className="text-white">docker push werikplaystore/keepboard:latest</p>
+                <p className="text-white">docker push werikoliveira/facilitadordiario:tagname</p>
                 <p className="mt-1"># Ou executar o script automatizado incluído:</p>
                 <p className="text-amber-300">bash docker-push.sh</p>
               </div>
+            </div>
+
+            {/* GitHub Actions Auto-Push Secrets Guide */}
+            <div className="p-4 bg-slate-800/80 rounded-xl border border-slate-700 space-y-2">
+              <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                <Laptop className="w-4 h-4" /> Secrets para o GitHub Actions (Push Automático)
+              </span>
+              <p className="text-xs text-slate-300">
+                Para o GitHub compilar e enviar a imagem para o Docker Hub automaticamente a cada push na branch principal (<code className="text-amber-300">/.github/workflows/docker-publish.yml</code>), configure no GitHub em <strong>Settings &gt; Secrets and variables &gt; Actions</strong>:
+              </p>
+              <ul className="text-xs text-slate-200 space-y-1 list-disc list-inside bg-slate-950 p-3 rounded-lg font-mono border border-slate-800">
+                <li><strong className="text-emerald-400">DOCKERHUB_USERNAME</strong>: <span className="text-slate-300">werikoliveira</span></li>
+                <li><strong className="text-emerald-400">DOCKERHUB_TOKEN</strong>: <span className="text-slate-300">Personal Access Token gerado no Docker Hub (Account Settings &gt; Security &gt; New Access Token)</span></li>
+              </ul>
             </div>
           </div>
 

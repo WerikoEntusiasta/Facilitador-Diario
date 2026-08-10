@@ -3,8 +3,8 @@
 # Script para compilar e fazer push da imagem Docker para o Docker Hub
 # Substitua 'werikplaystore' pelo seu nome de usuário do Docker Hub se necessário.
 
-DOCKER_USER="werikplaystore"
-IMAGE_NAME="keepboard"
+DOCKER_USER="werikoliveira"
+IMAGE_NAME="facilitadordiario"
 TAG="latest"
 VERSION="v1.0.0"
 
