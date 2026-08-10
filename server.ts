@@ -14,6 +14,27 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+  // Enable CORS for mobile devices & external clients
+  app.use((req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Server-Key, X-Vault-Password');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    
+    // Optional server secret key check if configured
+    const requiredKey = process.env.SERVER_ACCESS_KEY;
+    if (requiredKey && requiredKey.trim().length > 0) {
+      const providedKey = req.headers['x-server-key'];
+      if (providedKey !== requiredKey && !req.path.startsWith('/api/health')) {
+        return res.status(403).json({ error: 'Acesso negado: Chave/Senha do Servidor inválida' });
+      }
+    }
+    
+    next();
+  });
+
   // Serve API routes
   app.use('/api', apiRoutes);
 

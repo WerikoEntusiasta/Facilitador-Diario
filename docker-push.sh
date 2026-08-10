@@ -4,7 +4,7 @@
 # Substitua 'werikplaystore' pelo seu nome de usuário do Docker Hub se necessário.
 
 DOCKER_USER="werikoliveira"
-IMAGE_NAME="facilitadordiario"
+IMAGE_NAME="keepflow"
 TAG="latest"
 VERSION="v1.0.0"
 

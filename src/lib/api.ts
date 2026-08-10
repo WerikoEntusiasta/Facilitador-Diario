@@ -14,11 +14,81 @@ import {
   VaultItem,
 } from '../types';
 
-const API_BASE = '/api';
+// DYNAMIC SERVER CONNECTION CONFIGURATION
+export function getServerUrl(): string {
+  return (localStorage.getItem('kb_server_url') || '').trim().replace(/\/+$/, '');
+}
+
+export function setServerUrl(url: string): void {
+  const clean = url.trim().replace(/\/+$/, '');
+  if (clean) {
+    localStorage.setItem('kb_server_url', clean);
+  } else {
+    localStorage.removeItem('kb_server_url');
+  }
+}
+
+export function getServerKey(): string {
+  return (localStorage.getItem('kb_server_key') || '').trim();
+}
+
+export function setServerKey(key: string): void {
+  const clean = key.trim();
+  if (clean) {
+    localStorage.setItem('kb_server_key', clean);
+  } else {
+    localStorage.removeItem('kb_server_key');
+  }
+}
+
+export function getApiBaseUrl(): string {
+  const customUrl = getServerUrl();
+  return customUrl ? `${customUrl}/api` : '/api';
+}
+
+export function resolveUploadUrl(pathUrl: string): string {
+  if (!pathUrl) return '';
+  if (pathUrl.startsWith('http://') || pathUrl.startsWith('https://') || pathUrl.startsWith('data:')) {
+    return pathUrl;
+  }
+  const customUrl = getServerUrl();
+  const cleanPath = pathUrl.startsWith('/') ? pathUrl : `/${pathUrl}`;
+  return customUrl ? `${customUrl}${cleanPath}` : cleanPath;
+}
+
+export async function testServerConnection(targetUrl?: string, targetKey?: string): Promise<{ success: boolean; message: string; data?: any }> {
+  try {
+    const baseUrl = targetUrl !== undefined ? targetUrl.trim().replace(/\/+$/, '') : getServerUrl();
+    const apiUrl = baseUrl ? `${baseUrl}/api/health` : '/api/health';
+    const key = targetKey !== undefined ? targetKey.trim() : getServerKey();
+    
+    const headers: Record<string, string> = {};
+    if (key) {
+      headers['X-Server-Key'] = key;
+    }
+
+    const res = await fetch(apiUrl, { headers, method: 'GET' });
+    if (!res.ok) {
+      return { success: false, message: `Servidor respondeu com erro HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    return { success: true, message: 'Conexão com o servidor realizada com sucesso!', data };
+  } catch (err: any) {
+    return { success: false, message: err.message || 'Falha ao conectar no servidor. Verifique a URL e se a porta do container está aberta.' };
+  }
+}
 
 function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {};
   const token = localStorage.getItem('kb_auth_token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const key = getServerKey();
+  if (key) {
+    headers['X-Server-Key'] = key;
+  }
+  return headers;
 }
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
@@ -28,7 +98,9 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     ...options?.headers,
   };
 
-  const res = await fetch(`${API_BASE}${url}`, {
+  const apiBase = getApiBaseUrl();
+
+  const res = await fetch(`${apiBase}${url}`, {
     ...options,
     headers,
   });
@@ -106,12 +178,9 @@ export const apiDeleteNotePermanently = (id: number) =>
 export const apiUploadNoteAttachment = async (file: File): Promise<NoteAttachment> => {
   const formData = new FormData();
   formData.append('file', file);
-  const token = localStorage.getItem('kb_auth_token');
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  const res = await fetch('/api/notes/attachments/upload', {
+  const headers = getAuthHeaders();
+  const apiBase = getApiBaseUrl();
+  const res = await fetch(`${apiBase}/notes/attachments/upload`, {
     method: 'POST',
     headers,
     body: formData,
@@ -180,7 +249,8 @@ export const apiGetDocuments = () => request<PdfDocument[]>('/documents');
 export const apiUploadDocument = async (file: File): Promise<PdfDocument> => {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await fetch('/api/documents/upload', {
+  const apiBase = getApiBaseUrl();
+  const res = await fetch(`${apiBase}/documents/upload`, {
     method: 'POST',
     headers: getAuthHeaders(),
     body: formData,

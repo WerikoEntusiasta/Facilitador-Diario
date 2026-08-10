@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="50%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#0284c7"/>
+    </linearGradient>
+    <linearGradient id="flowGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+    <linearGradient id="flowGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Squircle Background -->
+  <rect x="16" y="16" width="480" height="480" rx="110" fill="url(#bgGrad)" />
+  <rect x="18" y="18" width="476" height="476" rx="108" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="4" />
+
+  <!-- Flow Waves / Stylized K Symbol -->
+  <g filter="url(#glow)">
+    <!-- Vertical Bar of K with rounded cap -->
+    <path d="M 140 120 L 140 392 C 140 405 152 416 166 416 C 180 416 192 405 192 392 L 192 120 C 192 107 180 96 166 96 C 152 96 140 107 140 120 Z" fill="url(#flowGrad1)" />
+
+    <!-- Upper Flow Wave Branch -->
+    <path d="M 180 256 C 220 220 280 140 350 140 C 390 140 410 170 380 200 C 330 250 250 270 192 280 Z" fill="url(#flowGrad1)" />
+
+    <!-- Lower Flow Wave Branch -->
+    <path d="M 180 240 C 240 260 320 300 370 330 C 400 350 380 390 340 390 C 270 390 220 310 180 270 Z" fill="url(#flowGrad2)" opacity="0.9" />
+
+    <!-- Central Flow Orb / Sparkle -->
+    <circle cx="280" cy="256" r="24" fill="#ffffff" opacity="0.95" />
+    <circle cx="280" cy="256" r="38" fill="#38bdf8" opacity="0.3" />
+  </g>
+</svg>

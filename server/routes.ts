@@ -1359,10 +1359,20 @@ router.delete('/vault/items/:id', (req, res) => {
    ========================================================================= */
 
 
+router.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    appName: 'KeepFlow Server',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    sqliteConnected: true,
+  });
+});
+
 router.get('/android/build-info', (req, res) => {
   res.json({
-    appName: 'KeepBoard Android',
-    packageName: 'com.keepboard.app',
+    appName: 'KeepFlow Android',
+    packageName: 'com.keepflow.app',
     version: '1.0.0',
     buildType: 'Capacitor / PWA WebAPK',
     dbSupport: 'SQLite (database.db)',

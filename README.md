@@ -1,11 +1,11 @@
-# 📱 Facilitador Diário (KeepBoard)
+# 📱 KeepFlow
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Docker Image](https://img.shields.io/badge/docker-werikoliveira%2Ffacilitadordiario-blue?logo=docker)
+![Docker Image](https://img.shields.io/badge/docker-werikoliveira%2Fkeepflow-blue?logo=docker)
 ![Android APK](https://img.shields.io/badge/Android-APK%20Dispon%C3%ADvel-brightgreen?logo=android)
 ![Stack](https://img.shields.io/badge/Stack-React%20%7C%20Express%20%7C%20SQLite%20%7C%20Capacitor-informational)
 
-O **Facilitador Diário** é uma plataforma web e móvel completa desenvolvida para organizar sua vida diária, rotinas de treino, tarefas, notas, calendários e documentos PDF em um só lugar.
+O **KeepFlow** é uma plataforma web e móvel completa desenvolvida para organizar sua vida diária, rotinas de treino, tarefas, notas, calendários, cofre de senhas e documentos PDF em um só lugar com armazenamento SQLite e sincronização rápida.
 
 ---
 
@@ -13,68 +13,55 @@ O **Facilitador Diário** é uma plataforma web e móvel completa desenvolvida p
 
 - 📝 **Notas estilo Google Keep**: Crie notas rápidas, marque com cores personalizadas, etiquetas, listas de checagem e fixe itens importantes.
 - 🏋️ **Ficha de Treino Semanal de Academia**: Monte e acompanhe suas rotinas de treino por dia da semana (Segunda a Domingo), organizando séries, repetições, cargas em kg, observações de execução e marcação de progresso diário. Inclui fichas pré-configuradas (ABC Hipertrofia, Foco Glúteos/Pernas, etc.).
+- 🔐 **Cofre de Senhas Seguro**: Armazene com segurança logins, senhas, cartões de crédito e notas secretas com gerador automático de senhas fortes.
 - 📋 **Quadros Kanban Interativos**: Gerencie projetos por colunas (*A Fazer*, *Em Progresso*, *Concluído*) com suporte a tags, prazos e movimentação de cartões.
 - 📅 **Calendário & Lembretes**: Visualize compromissos e agende lembretes integrados.
 - 📄 **Central de Documentos PDF**: Faça upload e armazene arquivos PDF com visualização integrada e organização por categorias.
-- 📱 **Aplicativo Android Nativo (.APK)**: Instale diretamente no seu smartphone Android com suporte a sincronização offline/online.
+- 📱 **Aplicativo Android Nativo (.APK / PWA)**: Suporte completo para uso em dispositivos móveis.
 
 ---
 
-## 📱 Download do App Android (.APK)
+## 🐳 Executando com Docker & ZimaOS / CasaOS
 
-Você pode baixar e instalar o aplicativo nativo para Android de duas formas:
+A aplicação está pronta para ser executada via Docker e totalmente compatível com **ZimaOS**, **CasaOS** e **Portainer** utilizando a imagem do Docker Hub: **`werikoliveira/keepflow`**.
 
-### 1. Download Direto via Web App
-Acesse a aba **"App Android & Sync"** dentro do sistema rodando no seu navegador ou clique no botão de download direto:
-- **URL de Download da APK**: `/api/android/download`
+### 🖥️ Como instalar no ZimaOS / CasaOS
 
-### 2. Download no GitHub Releases
-Acesse a página de Releases do repositório para baixar a versão mais recente do arquivo `.apk`:
-1. Acesse **[Releases](../../releases)** no GitHub.
-2. Baixe o arquivo `facilitador-diario.apk`.
-3. No seu dispositivo Android, permita a instalação de fontes desconhecidas se solicitado e abra o arquivo baixado.
+1. Abra o painel do **ZimaOS** ou **CasaOS**.
+2. Clique no botão **+** e selecione **"Instalar aplicativo personalizado"** (Custom App).
+3. No canto superior direito da tela de instalação, clique em **"Importar"** (Import / Docker Compose).
+4. Cole o conteúdo do arquivo `docker-compose.yml` e confirme.
+5. O ZimaOS preencherá automaticamente o nome (**KeepFlow**), ícone, porta `3000` e mapeamentos de volumes de dados e uploads!
 
 ---
 
-## 🐳 Executando com Docker & Docker Compose
+## 🚀 Como fazer commit / exportar para o GitHub
 
-A aplicação pode ser rodada facilmente via Docker utilizando a imagem oficial publicada no Docker Hub: **`werikoliveira/facilitadordiario`**.
+Como o ambiente do **Google AI Studio** roda em uma máquina virtual gerenciada online (sem diretório `.git` local direto), você pode enviar o código para o GitHub de duas maneiras simples:
 
-### Usando Docker Compose
+### Opção 1: Exportar direto pelo Google AI Studio (Mais Fácil)
+1. No menu superior direito da interface do **Google AI Studio**, clique no botão de **Export / Settings**.
+2. Selecione a opção **"Export to GitHub"** (ou **"Download ZIP"**).
+3. Ao conectar sua conta do GitHub, escolha o repositório `werikoliveira/keepflow` para publicar todas as atualizações diretamente!
 
-1. Na raiz do projeto, execute:
-   ```bash
-   docker-compose up -d
-   ```
-2. Acesse a aplicação no seu navegador em: `http://localhost:3000`
-
-### docker-compose.yml
-```yaml
-version: '3.8'
-
-services:
-  facilitador-diario:
-    image: werikoliveira/facilitadordiario:latest
-    container_name: facilitadordiario-app
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      - PORT=3000
-      - NODE_ENV=production
-    volumes:
-      - keepboard_data:/app/data
-
-volumes:
-  keepboard_data:
-    driver: local
+### Opção 2: Se você baixou o ZIP do projeto
+Extraia o arquivo ZIP no seu computador e rode no terminal:
+```bash
+git init
+git add .
+git commit -m "feat: atualizado KeepFlow com suporte ZimaOS e Docker"
+git branch -M main
+git remote add origin https://github.com/werikoliveira/keepflow.git
+git push -u origin main --force
 ```
+
+---
 
 ---
 
 ## 📤 Como Compilar e Fazer Push para o Docker Hub
 
-Para compilar a imagem localmente e enviá-la para o seu repositório no Docker Hub (`werikoliveira/facilitadordiario`):
+Para compilar a imagem localmente e enviá-la para o seu repositório no Docker Hub (`werikoliveira/keepflow`):
 
 ### Comandos Manuais no Terminal:
 ```bash
@@ -82,11 +69,11 @@ Para compilar a imagem localmente e enviá-la para o seu repositório no Docker 
 docker login
 
 # 2. Compilar a imagem Docker especificando a sua tag desejada
-docker build -t werikoliveira/facilitadordiario:latest -t werikoliveira/facilitadordiario:v1.0.0 .
+docker build -t werikoliveira/keepflow:latest -t werikoliveira/keepflow:v1.0.0 .
 
 # 3. Fazer o push da imagem
-docker push werikoliveira/facilitadordiario:latest
-docker push werikoliveira/facilitadordiario:v1.0.0
+docker push werikoliveira/keepflow:latest
+docker push werikoliveira/keepflow:v1.0.0
 ```
 
 ### Usando o Script Automatizado:
@@ -138,3 +125,4 @@ Acesse `http://localhost:3000` no seu navegador.
 ## 📄 Licença
 
 Este projeto está sob a licença MIT. Sinta-se livre para utilizar, modificar e distribuir.
+

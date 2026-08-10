@@ -10,9 +10,9 @@ import {
   Plus,
   Filter,
   CheckCircle2,
-  Smartphone,
   Dumbbell,
   ShieldCheck,
+  Server,
 } from 'lucide-react';
 import { ViewTab, Label } from '../types';
 
@@ -23,6 +23,7 @@ interface SidebarProps {
   selectedLabelId: number | null;
   onSelectLabel: (id: number | null) => void;
   onOpenLabelManager: () => void;
+  onOpenServerSettings?: () => void;
   isMobileOpen: boolean;
   onCloseMobile: () => void;
   notesCount?: number;
@@ -38,6 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedLabelId,
   onSelectLabel,
   onOpenLabelManager,
+  onOpenServerSettings,
   isMobileOpen,
   onCloseMobile,
   notesCount,
@@ -52,7 +54,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'workouts' as ViewTab, label: 'Treinos da Academia', icon: Dumbbell },
     { id: 'vault' as ViewTab, label: 'Cofre de Senhas', icon: ShieldCheck },
     { id: 'pdfs' as ViewTab, label: 'Central de PDFs', icon: FileCheck, count: pdfCount },
-    { id: 'android_app' as ViewTab, label: 'App Android & Sync', icon: Smartphone },
     { id: 'archive' as ViewTab, label: 'Arquivados', icon: FolderArchive, count: archiveCount },
     { id: 'trash' as ViewTab, label: 'Lixeira', icon: Trash2, count: trashCount },
   ];
@@ -178,10 +179,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Footer info */}
         <div className="p-3 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-500 flex items-center justify-between">
-          <span>SQLite Persistent</span>
-          <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold px-2 py-0.5 rounded-full text-[10px]">
-            Online
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            <span>SQLite Active</span>
+          </div>
+
+          {onOpenServerSettings && (
+            <button
+              onClick={onOpenServerSettings}
+              className="px-2 py-1 bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-bold transition flex items-center gap-1"
+              title="Configurar URL do Servidor Remoto"
+            >
+              <Server size={12} className="text-blue-500" /> Servidor
+            </button>
+          )}
         </div>
       </aside>
     </>

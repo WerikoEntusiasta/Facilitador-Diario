@@ -1,6 +1,6 @@
 {
-  "appId": "com.keepboard.app",
-  "appName": "KeepBoard",
+  "appId": "com.keepflow.app",
+  "appName": "KeepFlow",
   "webDir": "dist",
   "bundledWebRuntime": false
 }

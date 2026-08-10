@@ -1,12 +1,12 @@
 version: '3.8'
 
 services:
-  keepboard:
+  keepflow:
     build:
       context: .
       dockerfile: Dockerfile
-    image: werikoliveira/facilitadordiario:latest
-    container_name: facilitadordiario-app
+    image: werikoliveira/keepflow:latest
+    container_name: keepflow-app
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -15,9 +15,44 @@ services:
       - NODE_ENV=production
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     volumes:
-      # Persistent volume for SQLite database and uploaded files
-      - keepboard_data:/app/data
+      # Volume persistente para o banco SQLite e arquivos PDF enviados
+      - keepflow_data:/app/data
+      - keepflow_uploads:/app/uploads
+    x-casaos:
+      envs:
+        - container: GEMINI_API_KEY
+          description: Chave de API opcional do Google Gemini para IA
+      ports:
+        - container: "3000"
+          description: Porta da interface web do KeepFlow
+      volumes:
+        - container: /app/data
+          description: Dados SQLite e banco de dados
+        - container: /app/uploads
+          description: Uploads de PDFs e anexos
 
 volumes:
-  keepboard_data:
+  keepflow_data:
     driver: local
+  keepflow_uploads:
+    driver: local
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: keepflow
+  author: Werik Oliveira
+  category: Productivity
+  name: KeepFlow
+  title:
+    custom: KeepFlow
+  icon: https://raw.githubusercontent.com/werikoliveira/keepflow/main/public/logo.svg
+  tagline:
+    custom: Notas estilo Keep, Kanban, Treinos e Cofre de Senhas
+  overview:
+    custom: Plataforma de produtividade pessoal completa com notas, quadros kanban, treinos de academia, cofre de senhas e armazenamento local SQLite.
+  port_map: "3000"
+  scheme: http
+
+

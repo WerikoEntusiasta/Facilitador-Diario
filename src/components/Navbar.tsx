@@ -7,11 +7,13 @@ import {
   X,
   Tag,
   User as UserIcon,
-  Smartphone,
   CheckCircle2,
   Dumbbell,
+  Server,
 } from 'lucide-react';
 import { ViewTab, User } from '../types';
+
+import { Logo } from './Logo';
 
 interface NavbarProps {
   currentTab: ViewTab;
@@ -23,6 +25,7 @@ interface NavbarProps {
   isMobileOpen: boolean;
   onToggleMobileMenu: () => void;
   onOpenLabelManager: () => void;
+  onOpenServerSettings?: () => void;
   currentUser: User | null;
   onOpenAuth: () => void;
 }
@@ -37,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isMobileOpen,
   onToggleMobileMenu,
   onOpenLabelManager,
+  onOpenServerSettings,
   currentUser,
   onOpenAuth,
 }) => {
@@ -76,16 +80,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             {isMobileOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
 
-          <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => onTabChange('notes')}>
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 via-indigo-600 to-emerald-500 flex items-center justify-center text-white shadow-sm font-bold text-lg">
-              K
-            </div>
-            <div className="hidden sm:block">
-              <span className="font-bold text-slate-800 dark:text-white text-lg tracking-tight">KeepBoard</span>
-              <span className="block text-[11px] text-slate-500 dark:text-slate-400 font-medium -mt-1">
-                Notas • Kanban • Android
-              </span>
-            </div>
+          <div className="flex items-center cursor-pointer" onClick={() => onTabChange('notes')}>
+            <Logo size="md" showText={true} />
           </div>
 
           <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 hidden sm:block mx-1" />
@@ -119,18 +115,16 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Action buttons */}
         <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => onTabChange('android_app')}
-            className={`p-2 rounded-xl transition flex items-center gap-1.5 text-xs font-semibold ${
-              currentTab === 'android_app'
-                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
-                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-            title="App Android & SQLite Sync"
-          >
-            <Smartphone size={18} className="text-emerald-500" />
-            <span className="hidden xl:inline">Android App</span>
-          </button>
+          {onOpenServerSettings && (
+            <button
+              onClick={onOpenServerSettings}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"
+              title="Configurar Servidor Remoto (URL + Porta + Senha)"
+            >
+              <Server size={18} className="text-blue-500" />
+              <span className="hidden lg:inline">Servidor</span>
+            </button>
+          )}
 
           <button
             onClick={onOpenLabelManager}

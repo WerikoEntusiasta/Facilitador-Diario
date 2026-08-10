@@ -155,5 +155,5 @@ export interface VaultItem {
   updated_at?: string;
 }
 
-export type ViewTab = 'notes' | 'kanban' | 'calendar' | 'workouts' | 'pdfs' | 'vault' | 'archive' | 'trash' | 'android_app';
+export type ViewTab = 'notes' | 'kanban' | 'calendar' | 'workouts' | 'pdfs' | 'vault' | 'archive' | 'trash';
 

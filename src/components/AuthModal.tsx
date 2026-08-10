@@ -110,7 +110,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {currentUser && mode === 'profile'
               ? 'Meu Perfil Sync'
               : mode === 'login'
-              ? 'Entrar no KeepBoard'
+              ? 'Entrar no KeepFlow'
               : 'Criar Nova Conta'}
           </h2>
           <p className="text-xs text-blue-100 mt-1 max-w-xs">

@@ -1,6 +1,6 @@
 {
-  "name": "KeepBoard - Notas, Kanban e PDFs",
-  "description": "Aplicação de bloco de notas Google Keep, quadros Kanban Trello, calendário, gestão de PDFs, sistema de login/cadastro e sincronização Android com SQLite.",
+  "name": "KeepFlow - Notas, Kanban e PDFs",
+  "description": "Aplicação de bloco de notas, quadros Kanban, calendário, gestão de PDFs, sistema de login/cadastro e sincronização Android com SQLite em tempo real.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

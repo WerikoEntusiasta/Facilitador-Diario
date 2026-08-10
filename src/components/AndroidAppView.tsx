@@ -5,9 +5,10 @@ import { User as UserType } from '../types';
 interface AndroidAppViewProps {
   currentUser: UserType | null;
   onOpenAuth: () => void;
+  onOpenServerSettings?: () => void;
 }
 
-export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onOpenAuth }) => {
+export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onOpenAuth, onOpenServerSettings }) => {
   const [simulatorView, setSimulatorView] = useState<'notes' | 'kanban' | 'sync'>('notes');
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -40,7 +41,7 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
         '📱 Para instalar o APK no seu smartphone Android:\n\n' +
         '1. No Chrome ou Navegador Android, toque no menu de 3 pontinhos (⋮) no canto superior direito.\n' +
         '2. Selecione "Instalar aplicativo" ou "Adicionar à Tela Inicial".\n' +
-        '3. O Android criará o APK do KeepBoard diretamente na sua gaveta de aplicativos!'
+        '3. O Android criará o APK do KeepFlow diretamente na sua gaveta de aplicativos!'
       );
     }
   };
@@ -60,8 +61,9 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
             <Smartphone className="w-3.5 h-3.5" />
             App Android & Sync SQLite Multi-plataforma
           </div>
-          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-            KeepBoard no Seu Smartphone Android
+          <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight flex items-center gap-2">
+            <img src="/logo.svg" alt="KeepFlow" className="w-9 h-9 rounded-xl inline-block" referrerPolicy="no-referrer" />
+            KeepFlow no Seu Smartphone Android
           </h1>
           <p className="mt-2 text-sm text-emerald-50 leading-relaxed">
             Acesse suas notas do Google Keep, quadros Kanban, lembretes e arquivos PDF sincronizados em tempo real através do mesmo banco de dados **SQLite local**.
@@ -89,6 +91,16 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
               <Download className="w-4 h-4" />
               {installSuccess ? 'App Instalado com Sucesso!' : 'Baixar / Instalar APK Android (1-Clique)'}
             </button>
+
+            {onOpenServerSettings && (
+              <button
+                onClick={onOpenServerSettings}
+                className="px-4 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-md text-white font-bold rounded-xl text-xs border border-white/30 transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <Server className="w-4 h-4 text-emerald-300" />
+                Configurar URL do Servidor Remoto
+              </button>
+            )}
           </div>
         </div>
       </div>
