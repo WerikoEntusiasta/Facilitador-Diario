@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  keepboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: werikplaystore/keepboard:latest
+    container_name: keepboard-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    volumes:
+      # Persistent volume for SQLite database and uploaded files
+      - keepboard_data:/app/data
+
+volumes:
+  keepboard_data:
+    driver: local
