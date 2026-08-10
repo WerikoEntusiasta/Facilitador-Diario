@@ -38,6 +38,7 @@ import { LabelManagerModal } from './components/LabelManagerModal';
 import { AuthModal } from './components/AuthModal';
 import { AndroidAppView } from './components/AndroidAppView';
 import { WorkoutView } from './components/WorkoutView';
+import { VaultView } from './components/VaultView';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<ViewTab>('notes');
@@ -343,6 +344,8 @@ export default function App() {
           {currentTab === 'calendar' && <CalendarView />}
 
           {currentTab === 'workouts' && <WorkoutView />}
+
+          {currentTab === 'vault' && <VaultView />}
 
           {currentTab === 'pdfs' && <PdfCenter />}
 

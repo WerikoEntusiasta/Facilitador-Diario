@@ -10,6 +10,7 @@ import {
   User,
   AuthResponse,
   WorkoutRoutine,
+  VaultItem,
 } from '../types';
 
 const API_BASE = '/api';
@@ -202,4 +203,44 @@ export const apiUpdateWorkout = (id: number, data: Partial<WorkoutRoutine>) =>
   });
 export const apiDeleteWorkout = (id: number) =>
   request<{ success: boolean }>(`/workouts/${id}`, { method: 'DELETE' });
+
+// VAULT API
+export const apiGetVaultStatus = () => request<{ isConfigured: boolean }>('/vault/status');
+
+export const apiSetupVaultMasterPassword = (masterPassword: string) =>
+  request<{ success: boolean }>('/vault/setup', {
+    method: 'POST',
+    body: JSON.stringify({ masterPassword }),
+  });
+
+export const apiUnlockVault = (masterPassword: string) =>
+  request<{ success: boolean }>('/vault/unlock', {
+    method: 'POST',
+    body: JSON.stringify({ masterPassword }),
+  });
+
+export const apiGetVaultItems = (masterPassword: string) =>
+  request<VaultItem[]>('/vault/items', {
+    headers: { 'X-Vault-Password': masterPassword },
+  });
+
+export const apiCreateVaultItem = (masterPassword: string, item: Partial<VaultItem>) =>
+  request<VaultItem>('/vault/items', {
+    method: 'POST',
+    headers: { 'X-Vault-Password': masterPassword },
+    body: JSON.stringify(item),
+  });
+
+export const apiUpdateVaultItem = (masterPassword: string, id: number, item: Partial<VaultItem>) =>
+  request<VaultItem>(`/vault/items/${id}`, {
+    method: 'PUT',
+    headers: { 'X-Vault-Password': masterPassword },
+    body: JSON.stringify(item),
+  });
+
+export const apiDeleteVaultItem = (masterPassword: string, id: number) =>
+  request<{ success: boolean; id: number }>(`/vault/items/${id}`, {
+    method: 'DELETE',
+    headers: { 'X-Vault-Password': masterPassword },
+  });
 

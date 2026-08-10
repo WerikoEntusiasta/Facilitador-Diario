@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Smartphone,
   Dumbbell,
+  ShieldCheck,
 } from 'lucide-react';
 import { ViewTab, Label } from '../types';
 
@@ -49,6 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'kanban' as ViewTab, label: 'Quadros Kanban', icon: Kanban },
     { id: 'calendar' as ViewTab, label: 'Calendário & Lembretes', icon: Calendar },
     { id: 'workouts' as ViewTab, label: 'Treinos da Academia', icon: Dumbbell },
+    { id: 'vault' as ViewTab, label: 'Cofre de Senhas', icon: ShieldCheck },
     { id: 'pdfs' as ViewTab, label: 'Central de PDFs', icon: FileCheck, count: pdfCount },
     { id: 'android_app' as ViewTab, label: 'App Android & Sync', icon: Smartphone },
     { id: 'archive' as ViewTab, label: 'Arquivados', icon: FolderArchive, count: archiveCount },

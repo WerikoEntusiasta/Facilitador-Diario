@@ -159,6 +159,25 @@ function createSchema(db: Database) {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS vault_settings (
+      user_id INTEGER PRIMARY KEY,
+      master_password_hash TEXT NOT NULL,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS vault_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER DEFAULT 1,
+      app_name TEXT NOT NULL,
+      category TEXT DEFAULT 'Geral',
+      username_email TEXT NOT NULL,
+      password TEXT NOT NULL,
+      url TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Ensure user_id column exists on existing databases
@@ -167,6 +186,7 @@ function createSchema(db: Database) {
   safeAddColumn(db, 'kanban_boards', 'user_id INTEGER DEFAULT 1');
   safeAddColumn(db, 'pdf_documents', 'user_id INTEGER DEFAULT 1');
   safeAddColumn(db, 'workouts', 'user_id INTEGER DEFAULT 1');
+  safeAddColumn(db, 'vault_items', 'user_id INTEGER DEFAULT 1');
 
   // Seed default user if empty
   const userCheck = db.exec('SELECT COUNT(*) as count FROM users');

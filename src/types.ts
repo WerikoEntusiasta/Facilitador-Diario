@@ -128,5 +128,18 @@ export interface WorkoutRoutine {
   updated_at?: string;
 }
 
-export type ViewTab = 'notes' | 'kanban' | 'calendar' | 'workouts' | 'pdfs' | 'archive' | 'trash' | 'android_app';
+export interface VaultItem {
+  id: number;
+  user_id?: number;
+  app_name: string;
+  category: string;
+  username_email: string;
+  password: string;
+  url?: string;
+  notes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type ViewTab = 'notes' | 'kanban' | 'calendar' | 'workouts' | 'pdfs' | 'vault' | 'archive' | 'trash' | 'android_app';
 

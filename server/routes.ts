@@ -1046,8 +1046,184 @@ router.delete('/workouts/:id', (req, res) => {
 });
 
 /* =========================================================================
+   PASSWORD VAULT (COFRE DE SENHAS - 16 CHARS)
+   ========================================================================= */
+
+function hashMasterPassword(password: string): string {
+  return crypto.createHash('sha256').update(`vault-salt-${password}`).digest('hex');
+}
+
+function verifyVaultPassword(req: any, res: any): boolean {
+  const userId = getUserIdFromReq(req);
+  const masterPassword = req.headers['x-vault-password'];
+  if (!masterPassword || typeof masterPassword !== 'string') {
+    res.status(401).json({ error: 'Senha mestra não fornecida' });
+    return false;
+  }
+  const setting = queryOne('SELECT master_password_hash FROM vault_settings WHERE user_id = ?', [userId]);
+  if (!setting) {
+    res.status(400).json({ error: 'Cofre ainda não foi configurado' });
+    return false;
+  }
+  const hash = hashMasterPassword(masterPassword);
+  if (hash !== setting.master_password_hash) {
+    res.status(403).json({ error: 'Senha mestra incorreta' });
+    return false;
+  }
+  return true;
+}
+
+router.get('/vault/status', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const setting = queryOne('SELECT user_id FROM vault_settings WHERE user_id = ?', [userId]);
+    res.json({ isConfigured: Boolean(setting) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/vault/setup', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const { masterPassword } = req.body;
+    if (!masterPassword || typeof masterPassword !== 'string') {
+      return res.status(400).json({ error: 'Senha mestra é obrigatória' });
+    }
+    if (masterPassword.length < 16) {
+      return res.status(400).json({ error: 'A senha mestra precisa ter no mínimo 16 caracteres' });
+    }
+
+    const hash = hashMasterPassword(masterPassword);
+    runQuery(
+      `INSERT INTO vault_settings (user_id, master_password_hash) VALUES (?, ?) 
+       ON CONFLICT(user_id) DO UPDATE SET master_password_hash = excluded.master_password_hash`,
+      [userId, hash]
+    );
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/vault/unlock', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const { masterPassword } = req.body;
+    if (!masterPassword) {
+      return res.status(400).json({ error: 'Informe a senha mestra de 16 caracteres' });
+    }
+
+    const setting = queryOne('SELECT master_password_hash FROM vault_settings WHERE user_id = ?', [userId]);
+    if (!setting) {
+      return res.status(400).json({ error: 'O Cofre de Senhas ainda não foi configurado' });
+    }
+
+    const hash = hashMasterPassword(masterPassword);
+    if (hash !== setting.master_password_hash) {
+      return res.status(401).json({ error: 'Senha mestra incorreta! Verifique os caracteres e tente novamente.' });
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/vault/items', (req, res) => {
+  try {
+    if (!verifyVaultPassword(req, res)) return;
+    const userId = getUserIdFromReq(req);
+    const items = queryAll('SELECT * FROM vault_items WHERE user_id = ? ORDER BY app_name ASC', [userId]);
+    res.json(items);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/vault/items', (req, res) => {
+  try {
+    if (!verifyVaultPassword(req, res)) return;
+    const userId = getUserIdFromReq(req);
+    const { app_name, category, username_email, password, url, notes } = req.body;
+
+    if (!app_name || !username_email || !password) {
+      return res.status(400).json({ error: 'Nome do app, usuário/e-mail e senha são obrigatórios' });
+    }
+
+    const result = runQuery(
+      `INSERT INTO vault_items (user_id, app_name, category, username_email, password, url, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        userId,
+        app_name.trim(),
+        category || 'Geral',
+        username_email.trim(),
+        password,
+        url || '',
+        notes || '',
+      ]
+    );
+
+    const created = queryOne('SELECT * FROM vault_items WHERE id = ?', [result.lastInsertRowid]);
+    res.json(created);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/vault/items/:id', (req, res) => {
+  try {
+    if (!verifyVaultPassword(req, res)) return;
+    const userId = getUserIdFromReq(req);
+    const id = Number(req.params.id);
+    const { app_name, category, username_email, password, url, notes } = req.body;
+
+    const existing = queryOne('SELECT * FROM vault_items WHERE id = ? AND user_id = ?', [id, userId]);
+    if (!existing) {
+      return res.status(404).json({ error: 'Item não encontrado no cofre' });
+    }
+
+    runQuery(
+      `UPDATE vault_items SET app_name = ?, category = ?, username_email = ?, password = ?, url = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND user_id = ?`,
+      [
+        app_name || existing.app_name,
+        category || existing.category,
+        username_email || existing.username_email,
+        password || existing.password,
+        url !== undefined ? url : existing.url,
+        notes !== undefined ? notes : existing.notes,
+        id,
+        userId,
+      ]
+    );
+
+    const updated = queryOne('SELECT * FROM vault_items WHERE id = ?', [id]);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/vault/items/:id', (req, res) => {
+  try {
+    if (!verifyVaultPassword(req, res)) return;
+    const userId = getUserIdFromReq(req);
+    const id = Number(req.params.id);
+
+    runQuery('DELETE FROM vault_items WHERE id = ? AND user_id = ?', [id, userId]);
+    res.json({ success: true, id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* =========================================================================
    ANDROID APK PACKAGE ROUTE
    ========================================================================= */
+
 
 router.get('/android/build-info', (req, res) => {
   res.json({
