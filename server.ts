@@ -38,8 +38,16 @@ async function startServer() {
   // Serve API routes
   app.use('/api', apiRoutes);
 
-  // Serve static uploads
-  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+  // Serve static uploads with strict security headers
+  app.use(
+    '/uploads',
+    (req, res, next) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+      next();
+    },
+    express.static(path.join(process.cwd(), 'uploads'))
+  );
 
   // Vite middleware in dev mode
   if (process.env.NODE_ENV !== 'production') {

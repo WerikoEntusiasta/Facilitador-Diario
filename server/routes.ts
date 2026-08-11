@@ -12,13 +12,27 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
+// Secret for signing custom auth tokens
+const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+
+// Password hashing function using PBKDF2 with salt
+function hashPassword(password: string): string {
+  return crypto.pbkdf2Sync(password, 'keepflow-salt-2026', 10000, 64, 'sha512').toString('hex');
+}
+
+// Block executable/dangerous files from uploads to prevent Remote Code Execution / Stored XSS
+const BLOCKED_EXTENSIONS = [
+  '.exe', '.dll', '.so', '.sh', '.bat', '.cmd', '.php', '.phtml', '.php3', '.php4', '.php5',
+  '.js', '.cjs', '.mjs', '.html', '.htm', '.xhtml', '.svg', '.vbs', '.jar', '.py', '.rb', '.pl'
+];
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname) || '.pdf';
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(8).toString('hex');
+    const ext = path.extname(file.originalname).toLowerCase() || '.pdf';
     cb(null, 'doc-' + uniqueSuffix + ext);
   },
 });
@@ -27,10 +41,14 @@ const upload = multer({
   storage,
   limits: { fileSize: 25 * 1024 * 1024 }, // 25MB limit
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf' || file.originalname.toLowerCase().endsWith('.pdf')) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (BLOCKED_EXTENSIONS.includes(ext)) {
+      return cb(new Error('Tipo de arquivo não permitido por razões de segurança.'));
+    }
+    if (file.mimetype === 'application/pdf' || ext === '.pdf') {
       cb(null, true);
     } else {
-      cb(new Error('Apenas arquivos PDF são permitidos'));
+      cb(new Error('Apenas arquivos PDF são permitidos para o Centro de Documentos'));
     }
   },
 });
@@ -40,8 +58,8 @@ const attachmentStorage = multer.diskStorage({
     cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname) || '';
+    const uniqueSuffix = Date.now() + '-' + crypto.randomBytes(8).toString('hex');
+    const ext = path.extname(file.originalname).toLowerCase() || '';
     cb(null, 'att-' + uniqueSuffix + ext);
   },
 });
@@ -49,6 +67,13 @@ const attachmentStorage = multer.diskStorage({
 const attachmentUpload = multer({
   storage: attachmentStorage,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (BLOCKED_EXTENSIONS.includes(ext)) {
+      return cb(new Error('Extensão de arquivo não permitida por razões de segurança.'));
+    }
+    cb(null, true);
+  },
 });
 
 /* =========================================================================
@@ -57,21 +82,32 @@ const attachmentUpload = multer({
 
 function generateToken(userId: number): string {
   const payload = `${userId}.${Date.now()}`;
-  const secret = process.env.JWT_SECRET || 'keepboard-secret-key-2026';
-  const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex').substring(0, 16);
+  const sig = crypto.createHmac('sha256', JWT_SECRET).update(payload).digest('hex').substring(0, 16);
   return Buffer.from(`${payload}.${sig}`).toString('base64');
 }
 
 function getUserIdFromReq(req: any): number {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) return 1;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return 1; // Default single-tenant user for local docker sessions
+    }
     const token = authHeader.split(' ')[1];
+    if (!token) return 1;
+
     const decoded = Buffer.from(token, 'base64').toString('utf-8');
     const parts = decoded.split('.');
-    if (parts.length >= 2) {
+    if (parts.length >= 3) {
       const uid = parseInt(parts[0], 10);
-      if (!isNaN(uid) && uid > 0) return uid;
+      const timestamp = parts[1];
+      const sig = parts[2];
+
+      const payload = `${uid}.${timestamp}`;
+      const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(payload).digest('hex').substring(0, 16);
+
+      if (sig.length === expectedSig.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
+        if (!isNaN(uid) && uid > 0) return uid;
+      }
     }
     return 1;
   } catch (e) {
@@ -82,17 +118,24 @@ function getUserIdFromReq(req: any): number {
 router.post('/auth/register', (req, res) => {
   try {
     const { name, email, password, avatar } = req.body;
-    if (!name || !email || !password) {
+    if (!name || typeof name !== 'string' || !email || typeof email !== 'string' || !password || typeof password !== 'string') {
       return res.status(400).json({ error: 'Preencha todos os campos obrigatórios (nome, e-mail e senha)' });
     }
     const cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.length < 5 || !cleanEmail.includes('@')) {
+      return res.status(400).json({ error: 'Forneça um endereço de e-mail válido' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'A senha deve ter no mínimo 6 caracteres' });
+    }
+
     const existing = queryOne('SELECT id FROM users WHERE email = ?', [cleanEmail]);
     if (existing) {
       return res.status(400).json({ error: 'Este e-mail já está cadastrado em outra conta' });
     }
-    const password_hash = crypto.createHash('sha256').update(password).digest('hex');
-    const defaultAvatar =
-      avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`;
+
+    const password_hash = hashPassword(password);
+    const defaultAvatar = avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`;
 
     const result = runQuery(
       'INSERT INTO users (name, email, password_hash, avatar) VALUES (?, ?, ?, ?)',
@@ -120,8 +163,9 @@ router.post('/auth/login', (req, res) => {
     if (!email || !password) {
       return res.status(400).json({ error: 'E-mail e senha são obrigatórios' });
     }
-    const cleanEmail = email.trim().toLowerCase();
-    const password_hash = crypto.createHash('sha256').update(password).digest('hex');
+    const cleanEmail = String(email).trim().toLowerCase();
+    const password_hash = hashPassword(String(password));
+
     const user = queryOne(
       'SELECT id, name, email, avatar, created_at FROM users WHERE email = ? AND password_hash = ?',
       [cleanEmail, password_hash]
@@ -155,16 +199,23 @@ router.put('/auth/profile', (req, res) => {
     const userId = getUserIdFromReq(req);
     const { name, avatar, newPassword } = req.body;
 
-    if (newPassword && newPassword.trim()) {
-      const password_hash = crypto.createHash('sha256').update(newPassword.trim()).digest('hex');
+    if (newPassword && typeof newPassword === 'string' && newPassword.trim()) {
+      if (newPassword.trim().length < 6) {
+        return res.status(400).json({ error: 'A nova senha deve ter no mínimo 6 caracteres' });
+      }
+      const password_hash = hashPassword(newPassword.trim());
       runQuery('UPDATE users SET name = ?, avatar = ?, password_hash = ? WHERE id = ?', [
-        name || '',
-        avatar || '',
+        String(name || '').trim(),
+        String(avatar || '').trim(),
         password_hash,
         userId,
       ]);
     } else {
-      runQuery('UPDATE users SET name = ?, avatar = ? WHERE id = ?', [name || '', avatar || '', userId]);
+      runQuery('UPDATE users SET name = ?, avatar = ? WHERE id = ?', [
+        String(name || '').trim(),
+        String(avatar || '').trim(),
+        userId
+      ]);
     }
     const user = queryOne('SELECT id, name, email, avatar, created_at FROM users WHERE id = ?', [userId]);
     res.json(user);
@@ -191,7 +242,7 @@ router.post('/labels', (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
     const { name, color } = req.body;
-    if (!name || !name.trim()) {
+    if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'Nome da etiqueta é obrigatório' });
     }
     const result = runQuery('INSERT INTO labels (user_id, name, color) VALUES (?, ?, ?)', [
@@ -208,10 +259,18 @@ router.post('/labels', (req, res) => {
 
 router.delete('/labels/:id', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const id = req.params.id;
+
+    // Verify ownership (IDOR check)
+    const existing = queryOne('SELECT id FROM labels WHERE id = ? AND user_id = ?', [id, userId]);
+    if (!existing) {
+      return res.status(403).json({ error: 'Etiqueta não encontrada ou sem permissão de exclusão' });
+    }
+
     runQuery('DELETE FROM note_labels WHERE label_id = ?', [id]);
     runQuery('DELETE FROM card_labels WHERE label_id = ?', [id]);
-    runQuery('DELETE FROM labels WHERE id = ?', [id]);
+    runQuery('DELETE FROM labels WHERE id = ? AND user_id = ?', [id, userId]);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -280,7 +339,6 @@ router.get('/notes', (req, res) => {
     sql += ' ORDER BY is_pinned DESC, updated_at DESC';
     const notes = queryAll(sql, params);
 
-    // Attach labels and parse JSON fields for notes
     const notesWithDetails = notes.map((note) => {
       const labels = queryAll(
         'SELECT l.* FROM labels l JOIN note_labels nl ON l.id = nl.label_id WHERE nl.note_id = ?',
@@ -298,6 +356,7 @@ router.get('/notes', (req, res) => {
       } catch (e) {
         parsedAttachments = [];
       }
+
       return {
         ...note,
         is_pinned: Boolean(note.is_pinned),
@@ -325,7 +384,7 @@ router.post('/notes', (req, res) => {
     const result = runQuery(
       `INSERT INTO notes (user_id, title, content, checklist, attachments, color, is_pinned, reminder_date) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, title || '', content || '', checklistStr, attachmentsStr, color || '#ffffff', is_pinned ? 1 : 0, reminder_date || null]
+      [userId, String(title || ''), String(content || ''), checklistStr, attachmentsStr, color || '#ffffff', is_pinned ? 1 : 0, reminder_date || null]
     );
 
     const noteId = result.lastInsertRowid;
@@ -355,7 +414,15 @@ router.post('/notes', (req, res) => {
 
 router.put('/notes/:id', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
+
+    // Ownership check (IDOR fix)
+    const existing = queryOne('SELECT id FROM notes WHERE id = ? AND user_id = ?', [id, userId]);
+    if (!existing) {
+      return res.status(403).json({ error: 'Nota não encontrada ou acesso negado' });
+    }
+
     const { title, content, checklist, attachments, color, is_pinned, is_archived, is_trashed, reminder_date, labelIds } = req.body;
 
     const checklistStr = JSON.stringify(checklist || []);
@@ -367,10 +434,10 @@ router.put('/notes/:id', (req, res) => {
         title = ?, content = ?, checklist = ?, attachments = ?, color = ?, 
         is_pinned = ?, is_archived = ?, is_trashed = ?, 
         reminder_date = ?, updated_at = ?
-       WHERE id = ?`,
+       WHERE id = ? AND user_id = ?`,
       [
-        title || '',
-        content || '',
+        String(title || ''),
+        String(content || ''),
         checklistStr,
         attachmentsStr,
         color || '#ffffff',
@@ -380,6 +447,7 @@ router.put('/notes/:id', (req, res) => {
         reminder_date || null,
         now,
         id,
+        userId,
       ]
     );
 
@@ -416,12 +484,13 @@ router.put('/notes/:id', (req, res) => {
 
 router.patch('/notes/:id/archive', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
-    const note = queryOne('SELECT is_archived FROM notes WHERE id = ?', [id]);
-    if (!note) return res.status(404).json({ error: 'Nota não encontrada' });
+    const note = queryOne('SELECT is_archived FROM notes WHERE id = ? AND user_id = ?', [id, userId]);
+    if (!note) return res.status(404).json({ error: 'Nota não encontrada ou acesso negado' });
 
     const nextArchived = note.is_archived ? 0 : 1;
-    runQuery('UPDATE notes SET is_archived = ?, is_pinned = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [nextArchived, id]);
+    runQuery('UPDATE notes SET is_archived = ?, is_pinned = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?', [nextArchived, id, userId]);
     res.json({ id, is_archived: Boolean(nextArchived) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -430,12 +499,13 @@ router.patch('/notes/:id/archive', (req, res) => {
 
 router.patch('/notes/:id/trash', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
-    const note = queryOne('SELECT is_trashed FROM notes WHERE id = ?', [id]);
-    if (!note) return res.status(404).json({ error: 'Nota não encontrada' });
+    const note = queryOne('SELECT is_trashed FROM notes WHERE id = ? AND user_id = ?', [id, userId]);
+    if (!note) return res.status(404).json({ error: 'Nota não encontrada ou acesso negado' });
 
     const nextTrashed = note.is_trashed ? 0 : 1;
-    runQuery('UPDATE notes SET is_trashed = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [nextTrashed, id]);
+    runQuery('UPDATE notes SET is_trashed = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?', [nextTrashed, id, userId]);
     res.json({ id, is_trashed: Boolean(nextTrashed) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -444,12 +514,13 @@ router.patch('/notes/:id/trash', (req, res) => {
 
 router.patch('/notes/:id/pin', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
-    const note = queryOne('SELECT is_pinned FROM notes WHERE id = ?', [id]);
-    if (!note) return res.status(404).json({ error: 'Nota não encontrada' });
+    const note = queryOne('SELECT is_pinned FROM notes WHERE id = ? AND user_id = ?', [id, userId]);
+    if (!note) return res.status(404).json({ error: 'Nota não encontrada ou acesso negado' });
 
     const nextPinned = note.is_pinned ? 0 : 1;
-    runQuery('UPDATE notes SET is_pinned = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [nextPinned, id]);
+    runQuery('UPDATE notes SET is_pinned = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?', [nextPinned, id, userId]);
     res.json({ id, is_pinned: Boolean(nextPinned) });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -458,9 +529,14 @@ router.patch('/notes/:id/pin', (req, res) => {
 
 router.delete('/notes/:id', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
+
+    const existing = queryOne('SELECT id FROM notes WHERE id = ? AND user_id = ?', [id, userId]);
+    if (!existing) return res.status(403).json({ error: 'Nota não encontrada ou acesso negado' });
+
     runQuery('DELETE FROM note_labels WHERE note_id = ?', [id]);
-    runQuery('DELETE FROM notes WHERE id = ?', [id]);
+    runQuery('DELETE FROM notes WHERE id = ? AND user_id = ?', [id, userId]);
     res.json({ success: true, id });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -485,7 +561,7 @@ router.post('/boards', (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
     const { title, description, color } = req.body;
-    if (!title || !title.trim()) {
+    if (!title || typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ error: 'Título do quadro é obrigatório' });
     }
 
@@ -510,9 +586,10 @@ router.post('/boards', (req, res) => {
 
 router.get('/boards/:id', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
-    const board = queryOne('SELECT * FROM kanban_boards WHERE id = ?', [id]);
-    if (!board) return res.status(404).json({ error: 'Quadro não encontrado' });
+    const board = queryOne('SELECT * FROM kanban_boards WHERE id = ? AND user_id = ?', [id, userId]);
+    if (!board) return res.status(404).json({ error: 'Quadro não encontrado ou acesso negado' });
 
     const columns = queryAll('SELECT * FROM kanban_columns WHERE board_id = ? ORDER BY position ASC', [id]);
 
@@ -557,13 +634,19 @@ router.get('/boards/:id', (req, res) => {
 
 router.put('/boards/:id', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
     const { title, description, color } = req.body;
-    runQuery('UPDATE kanban_boards SET title = ?, description = ?, color = ? WHERE id = ?', [
-      title || '',
-      description || '',
+
+    const board = queryOne('SELECT id FROM kanban_boards WHERE id = ? AND user_id = ?', [id, userId]);
+    if (!board) return res.status(403).json({ error: 'Quadro não encontrado ou acesso negado' });
+
+    runQuery('UPDATE kanban_boards SET title = ?, description = ?, color = ? WHERE id = ? AND user_id = ?', [
+      String(title || ''),
+      String(description || ''),
       color || '#3b82f6',
       id,
+      userId,
     ]);
     const updated = queryOne('SELECT * FROM kanban_boards WHERE id = ?', [id]);
     res.json(updated);
@@ -574,11 +657,16 @@ router.put('/boards/:id', (req, res) => {
 
 router.delete('/boards/:id', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
+
+    const board = queryOne('SELECT id FROM kanban_boards WHERE id = ? AND user_id = ?', [id, userId]);
+    if (!board) return res.status(403).json({ error: 'Quadro não encontrado ou acesso negado' });
+
     runQuery('DELETE FROM card_labels WHERE card_id IN (SELECT id FROM kanban_cards WHERE board_id = ?)', [id]);
     runQuery('DELETE FROM kanban_cards WHERE board_id = ?', [id]);
     runQuery('DELETE FROM kanban_columns WHERE board_id = ?', [id]);
-    runQuery('DELETE FROM kanban_boards WHERE id = ?', [id]);
+    runQuery('DELETE FROM kanban_boards WHERE id = ? AND user_id = ?', [id, userId]);
     res.json({ success: true, id });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -588,15 +676,19 @@ router.delete('/boards/:id', (req, res) => {
 // COLUMNS
 router.post('/columns', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { board_id, title } = req.body;
     if (!board_id || !title) return res.status(400).json({ error: 'Dados incompletos' });
+
+    const board = queryOne('SELECT id FROM kanban_boards WHERE id = ? AND user_id = ?', [board_id, userId]);
+    if (!board) return res.status(403).json({ error: 'Quadro não encontrado ou acesso negado' });
 
     const maxPosRes = queryOne('SELECT MAX(position) as maxPos FROM kanban_columns WHERE board_id = ?', [board_id]);
     const nextPos = (maxPosRes?.maxPos ?? -1) + 1;
 
     const result = runQuery('INSERT INTO kanban_columns (board_id, title, position) VALUES (?, ?, ?)', [
       board_id,
-      title.trim(),
+      String(title).trim(),
       nextPos,
     ]);
 
@@ -609,9 +701,14 @@ router.post('/columns', (req, res) => {
 
 router.put('/columns/:id', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
     const { title } = req.body;
-    runQuery('UPDATE kanban_columns SET title = ? WHERE id = ?', [title, id]);
+
+    const col = queryOne('SELECT c.id FROM kanban_columns c JOIN kanban_boards b ON c.board_id = b.id WHERE c.id = ? AND b.user_id = ?', [id, userId]);
+    if (!col) return res.status(403).json({ error: 'Coluna não encontrada ou acesso negado' });
+
+    runQuery('UPDATE kanban_columns SET title = ? WHERE id = ?', [String(title || ''), id]);
     res.json({ id, title });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -620,7 +717,12 @@ router.put('/columns/:id', (req, res) => {
 
 router.delete('/columns/:id', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
+
+    const col = queryOne('SELECT c.id FROM kanban_columns c JOIN kanban_boards b ON c.board_id = b.id WHERE c.id = ? AND b.user_id = ?', [id, userId]);
+    if (!col) return res.status(403).json({ error: 'Coluna não encontrada ou acesso negado' });
+
     runQuery('DELETE FROM card_labels WHERE card_id IN (SELECT id FROM kanban_cards WHERE column_id = ?)', [id]);
     runQuery('DELETE FROM kanban_cards WHERE column_id = ?', [id]);
     runQuery('DELETE FROM kanban_columns WHERE id = ?', [id]);
@@ -633,8 +735,12 @@ router.delete('/columns/:id', (req, res) => {
 // CARDS
 router.post('/cards', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { column_id, board_id, title, description, priority, due_date, checklist, labelIds } = req.body;
     if (!column_id || !board_id || !title) return res.status(400).json({ error: 'Dados do cartão incompletos' });
+
+    const board = queryOne('SELECT id FROM kanban_boards WHERE id = ? AND user_id = ?', [board_id, userId]);
+    if (!board) return res.status(403).json({ error: 'Quadro não encontrado ou acesso negado' });
 
     const maxPosRes = queryOne('SELECT MAX(position) as maxPos FROM kanban_cards WHERE column_id = ?', [column_id]);
     const nextPos = (maxPosRes?.maxPos ?? -1) + 1;
@@ -645,8 +751,8 @@ router.post('/cards', (req, res) => {
       [
         column_id,
         board_id,
-        title.trim(),
-        description || '',
+        String(title).trim(),
+        String(description || ''),
         priority || 'Média',
         due_date || null,
         nextPos,
@@ -677,9 +783,13 @@ router.post('/cards', (req, res) => {
 
 router.put('/cards/:id', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
-    const { title, description, priority, due_date, checklist, labelIds, column_id } = req.body;
 
+    const card = queryOne('SELECT c.id FROM kanban_cards c JOIN kanban_boards b ON c.board_id = b.id WHERE c.id = ? AND b.user_id = ?', [id, userId]);
+    if (!card) return res.status(403).json({ error: 'Cartão não encontrado ou acesso negado' });
+
+    const { title, description, priority, due_date, checklist, labelIds, column_id } = req.body;
     const now = new Date().toISOString();
 
     runQuery(
@@ -688,8 +798,8 @@ router.put('/cards/:id', (req, res) => {
         checklist = ?, column_id = COALESCE(?, column_id), updated_at = ? 
        WHERE id = ?`,
       [
-        title || '',
-        description || '',
+        String(title || ''),
+        String(description || ''),
         priority || 'Média',
         due_date || null,
         JSON.stringify(checklist || []),
@@ -721,7 +831,12 @@ router.put('/cards/:id', (req, res) => {
 
 router.patch('/cards/:id/move', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
+
+    const card = queryOne('SELECT c.id FROM kanban_cards c JOIN kanban_boards b ON c.board_id = b.id WHERE c.id = ? AND b.user_id = ?', [id, userId]);
+    if (!card) return res.status(403).json({ error: 'Cartão não encontrado ou acesso negado' });
+
     const { target_column_id, new_position } = req.body;
 
     runQuery('UPDATE kanban_cards SET column_id = ?, position = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
@@ -738,7 +853,12 @@ router.patch('/cards/:id/move', (req, res) => {
 
 router.delete('/cards/:id', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
+
+    const card = queryOne('SELECT c.id FROM kanban_cards c JOIN kanban_boards b ON c.board_id = b.id WHERE c.id = ? AND b.user_id = ?', [id, userId]);
+    if (!card) return res.status(403).json({ error: 'Cartão não encontrado ou acesso negado' });
+
     runQuery('DELETE FROM card_labels WHERE card_id = ?', [id]);
     runQuery('DELETE FROM kanban_cards WHERE id = ?', [id]);
     res.json({ success: true, id });
@@ -754,13 +874,11 @@ router.delete('/cards/:id', (req, res) => {
 router.get('/calendar', (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
-    // Get notes with reminders
     const notesWithReminders = queryAll(
       "SELECT id, title, reminder_date as date, 'note' as type, color FROM notes WHERE user_id = ? AND is_trashed = 0 AND reminder_date IS NOT NULL AND reminder_date != ''",
       [userId]
     );
 
-    // Get kanban cards with due dates
     const cardsWithDueDates = queryAll(
       "SELECT c.id, c.title, c.due_date as date, 'card' as type, c.priority, b.title as board_title FROM kanban_cards c JOIN kanban_boards b ON c.board_id = b.id WHERE b.user_id = ? AND c.is_trashed = 0 AND c.due_date IS NOT NULL AND c.due_date != ''",
       [userId]
@@ -798,7 +916,7 @@ router.get('/calendar/ics', (req, res) => {
 
     const formatIcsDate = (dStr: string) => {
       const clean = dStr.replace(/[-:]/g, '').replace('T', 'T');
-      if (clean.length === 8) return clean + 'T090000Z'; // default 9am
+      if (clean.length === 8) return clean + 'T090000Z';
       if (clean.length === 13) return clean.replace('T', 'T') + '00Z';
       return clean;
     };
@@ -887,14 +1005,14 @@ router.post('/documents/save-generated', (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
     const { title, base64Data, sourceType } = req.body;
-    if (!base64Data) {
+    if (!base64Data || typeof base64Data !== 'string') {
       return res.status(400).json({ error: 'Dados do PDF em base64 não fornecidos' });
     }
 
     const cleanBase64 = base64Data.replace(/^data:application\/pdf;base64,/, '');
     const buffer = Buffer.from(cleanBase64, 'base64');
 
-    const filename = `export-${Date.now()}-${Math.round(Math.random() * 1000)}.pdf`;
+    const filename = `export-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.pdf`;
     const filePath = path.join(uploadsDir, filename);
 
     fs.writeFileSync(filePath, buffer);
@@ -914,11 +1032,13 @@ router.post('/documents/save-generated', (req, res) => {
 
 router.get('/documents/:id/file', (req, res) => {
   try {
-    const doc = queryOne('SELECT * FROM pdf_documents WHERE id = ?', [req.params.id]);
+    const userId = getUserIdFromReq(req);
+    const doc = queryOne('SELECT * FROM pdf_documents WHERE id = ? AND user_id = ?', [req.params.id, userId]);
     if (!doc || !fs.existsSync(doc.file_path)) {
-      return res.status(404).json({ error: 'Arquivo PDF não encontrado' });
+      return res.status(404).json({ error: 'Arquivo PDF não encontrado ou acesso negado' });
     }
     res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.sendFile(path.resolve(doc.file_path));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -927,16 +1047,22 @@ router.get('/documents/:id/file', (req, res) => {
 
 router.delete('/documents/:id', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { id } = req.params;
-    const doc = queryOne('SELECT * FROM pdf_documents WHERE id = ?', [id]);
-    if (doc && fs.existsSync(doc.file_path)) {
+
+    const doc = queryOne('SELECT * FROM pdf_documents WHERE id = ? AND user_id = ?', [id, userId]);
+    if (!doc) {
+      return res.status(403).json({ error: 'Documento não encontrado ou acesso negado' });
+    }
+
+    if (fs.existsSync(doc.file_path)) {
       try {
         fs.unlinkSync(doc.file_path);
       } catch (e) {
         console.error('Erro ao deletar arquivo físico:', e);
       }
     }
-    runQuery('DELETE FROM pdf_documents WHERE id = ?', [id]);
+    runQuery('DELETE FROM pdf_documents WHERE id = ? AND user_id = ?', [id, userId]);
     res.json({ success: true, id });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -969,10 +1095,15 @@ router.get('/trash', (req, res) => {
 
 router.post('/trash/restore', (req, res) => {
   try {
+    const userId = getUserIdFromReq(req);
     const { type, id } = req.body;
     if (type === 'note') {
-      runQuery('UPDATE notes SET is_trashed = 0 WHERE id = ?', [id]);
+      const note = queryOne('SELECT id FROM notes WHERE id = ? AND user_id = ?', [id, userId]);
+      if (!note) return res.status(403).json({ error: 'Nota não encontrada ou acesso negado' });
+      runQuery('UPDATE notes SET is_trashed = 0 WHERE id = ? AND user_id = ?', [id, userId]);
     } else if (type === 'card') {
+      const card = queryOne('SELECT c.id FROM kanban_cards c JOIN kanban_boards b ON c.board_id = b.id WHERE c.id = ? AND b.user_id = ?', [id, userId]);
+      if (!card) return res.status(403).json({ error: 'Cartão não encontrado ou acesso negado' });
       runQuery('UPDATE kanban_cards SET is_trashed = 0 WHERE id = ?', [id]);
     }
     res.json({ success: true, type, id });
@@ -1051,16 +1182,16 @@ router.post('/workouts', (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
     const { title, description, days } = req.body;
-    if (!title) {
+    if (!title || typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ error: 'Título é obrigatório' });
     }
     const daysJson = JSON.stringify(days || []);
     const result = runQuery(
       'INSERT INTO workouts (user_id, title, description, days_json) VALUES (?, ?, ?, ?)',
-      [userId, title, description || '', daysJson]
+      [userId, title.trim(), description || '', daysJson]
     );
     const created = queryOne('SELECT * FROM workouts WHERE id = ?', [result.lastInsertRowid]);
-    res.status(210).json({
+    res.json({
       id: created.id,
       user_id: created.user_id,
       title: created.title,
@@ -1082,11 +1213,11 @@ router.put('/workouts/:id', (req, res) => {
 
     const existing = queryOne('SELECT * FROM workouts WHERE id = ? AND user_id = ?', [id, userId]);
     if (!existing) {
-      return res.status(404).json({ error: 'Treino não encontrado' });
+      return res.status(404).json({ error: 'Treino não encontrado ou acesso negado' });
     }
 
-    const updatedTitle = title !== undefined ? title : existing.title;
-    const updatedDesc = description !== undefined ? description : existing.description;
+    const updatedTitle = title !== undefined ? String(title) : existing.title;
+    const updatedDesc = description !== undefined ? String(description) : existing.description;
     const updatedDaysJson = days !== undefined ? JSON.stringify(days) : existing.days_json;
 
     runQuery(
@@ -1113,6 +1244,10 @@ router.delete('/workouts/:id', (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
     const id = Number(req.params.id);
+    const existing = queryOne('SELECT id FROM workouts WHERE id = ? AND user_id = ?', [id, userId]);
+    if (!existing) {
+      return res.status(403).json({ error: 'Treino não encontrado ou acesso negado' });
+    }
     runQuery('DELETE FROM workouts WHERE id = ? AND user_id = ?', [id, userId]);
     res.json({ success: true });
   } catch (err: any) {
@@ -1121,11 +1256,11 @@ router.delete('/workouts/:id', (req, res) => {
 });
 
 /* =========================================================================
-   PASSWORD VAULT (COFRE DE SENHAS - 16 CHARS)
+   PASSWORD VAULT (COFRE DE SENHAS - MIN 16 CHARS)
    ========================================================================= */
 
 function hashMasterPassword(password: string): string {
-  return crypto.createHash('sha256').update(`vault-salt-${password}`).digest('hex');
+  return crypto.pbkdf2Sync(password, 'vault-salt-2026', 20000, 64, 'sha512').toString('hex');
 }
 
 function verifyVaultPassword(req: any, res: any): boolean {
@@ -1186,7 +1321,7 @@ router.post('/vault/unlock', (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
     const { masterPassword } = req.body;
-    if (!masterPassword) {
+    if (!masterPassword || typeof masterPassword !== 'string') {
       return res.status(400).json({ error: 'Informe a senha mestra de 16 caracteres' });
     }
 
@@ -1245,7 +1380,7 @@ router.post('/vault/items', (req, res) => {
     const userId = getUserIdFromReq(req);
     const { app_name, category, username_email, password, url, notes, doc_type, doc_data, attachments } = req.body;
 
-    if (!app_name) {
+    if (!app_name || typeof app_name !== 'string') {
       return res.status(400).json({ error: 'Nome do item ou documento é obrigatório' });
     }
 
@@ -1358,7 +1493,6 @@ router.delete('/vault/items/:id', (req, res) => {
    ANDROID APK PACKAGE ROUTE
    ========================================================================= */
 
-
 router.get('/health', (req, res) => {
   res.json({
     status: 'ok',
@@ -1382,4 +1516,3 @@ router.get('/android/build-info', (req, res) => {
 });
 
 export default router;
-

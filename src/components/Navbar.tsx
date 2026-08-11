@@ -9,7 +9,6 @@ import {
   User as UserIcon,
   CheckCircle2,
   Dumbbell,
-  Server,
 } from 'lucide-react';
 import { ViewTab, User } from '../types';
 
@@ -25,7 +24,6 @@ interface NavbarProps {
   isMobileOpen: boolean;
   onToggleMobileMenu: () => void;
   onOpenLabelManager: () => void;
-  onOpenServerSettings?: () => void;
   currentUser: User | null;
   onOpenAuth: () => void;
 }
@@ -40,7 +38,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   isMobileOpen,
   onToggleMobileMenu,
   onOpenLabelManager,
-  onOpenServerSettings,
   currentUser,
   onOpenAuth,
 }) => {
@@ -115,17 +112,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Action buttons */}
         <div className="flex items-center gap-1.5">
-          {onOpenServerSettings && (
-            <button
-              onClick={onOpenServerSettings}
-              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"
-              title="Configurar Servidor Remoto (URL + Porta + Senha)"
-            >
-              <Server size={18} className="text-blue-500" />
-              <span className="hidden lg:inline">Servidor</span>
-            </button>
-          )}
-
           <button
             onClick={onOpenLabelManager}
             className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"

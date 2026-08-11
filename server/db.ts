@@ -199,7 +199,7 @@ function createSchema(db: Database) {
   // Seed default user if empty
   const userCheck = db.exec('SELECT COUNT(*) as count FROM users');
   if (userCheck.length === 0 || (userCheck[0].values[0][0] as number) === 0) {
-    const defaultPasswordHash = crypto.createHash('sha256').update('123456').digest('hex');
+    const defaultPasswordHash = crypto.pbkdf2Sync('123456', 'keepflow-salt-2026', 10000, 64, 'sha512').toString('hex');
     db.run(
       `INSERT INTO users (id, name, email, password_hash, avatar) VALUES (1, 'Usuário Demo', 'demo@keepboard.app', ?, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')`,
       [defaultPasswordHash]

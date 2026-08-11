@@ -39,7 +39,6 @@ import { AuthModal } from './components/AuthModal';
 import { AndroidAppView } from './components/AndroidAppView';
 import { WorkoutView } from './components/WorkoutView';
 import { VaultView } from './components/VaultView';
-import { ServerSettingsModal } from './components/ServerSettingsModal';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<ViewTab>('notes');
@@ -81,7 +80,6 @@ export default function App() {
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
 
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
-  const [isServerSettingsOpen, setIsServerSettingsOpen] = useState(false);
 
   useEffect(() => {
     if (darkMode) {
@@ -283,7 +281,6 @@ export default function App() {
         isMobileOpen={isMobileOpen}
         onToggleMobileMenu={() => setIsMobileOpen(!isMobileOpen)}
         onOpenLabelManager={() => setIsLabelModalOpen(true)}
-        onOpenServerSettings={() => setIsServerSettingsOpen(true)}
         currentUser={currentUser}
         onOpenAuth={() => setIsAuthModalOpen(true)}
       />
@@ -300,7 +297,6 @@ export default function App() {
             if (currentTab !== 'notes') setCurrentTab('notes');
           }}
           onOpenLabelManager={() => setIsLabelModalOpen(true)}
-          onOpenServerSettings={() => setIsServerSettingsOpen(true)}
           isMobileOpen={isMobileOpen}
           onCloseMobile={() => setIsMobileOpen(false)}
           notesCount={notes.length}
@@ -410,12 +406,6 @@ export default function App() {
         labels={labels}
         onCreateLabel={handleCreateLabel}
         onDeleteLabel={handleDeleteLabel}
-      />
-
-      <ServerSettingsModal
-        isOpen={isServerSettingsOpen}
-        onClose={() => setIsServerSettingsOpen(false)}
-        onServerConfigChanged={loadInitialData}
       />
     </div>
   );

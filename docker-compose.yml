@@ -47,7 +47,7 @@ x-casaos:
   name: KeepFlow
   title:
     custom: KeepFlow
-  icon: https://raw.githubusercontent.com/werikoliveira/keepflow/main/public/logo.svg
+  icon: https://raw.githubusercontent.com/werikoliveira/keepflow/main/public/logo.png
   tagline:
     custom: Notas estilo Keep, Kanban, Treinos e Cofre de Senhas
   overview:

@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   Dumbbell,
   ShieldCheck,
-  Server,
 } from 'lucide-react';
 import { ViewTab, Label } from '../types';
 
@@ -23,7 +22,6 @@ interface SidebarProps {
   selectedLabelId: number | null;
   onSelectLabel: (id: number | null) => void;
   onOpenLabelManager: () => void;
-  onOpenServerSettings?: () => void;
   isMobileOpen: boolean;
   onCloseMobile: () => void;
   notesCount?: number;
@@ -39,7 +37,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   selectedLabelId,
   onSelectLabel,
   onOpenLabelManager,
-  onOpenServerSettings,
   isMobileOpen,
   onCloseMobile,
   notesCount,
@@ -181,18 +178,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-3 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-500 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>SQLite Active</span>
+            <span>SQLite Ativo</span>
           </div>
-
-          {onOpenServerSettings && (
-            <button
-              onClick={onOpenServerSettings}
-              className="px-2 py-1 bg-slate-200/80 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg text-[10px] font-bold transition flex items-center gap-1"
-              title="Configurar URL do Servidor Remoto"
-            >
-              <Server size={12} className="text-blue-500" /> Servidor
-            </button>
-          )}
         </div>
       </aside>
     </>
