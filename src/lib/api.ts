@@ -67,6 +67,12 @@ export function setServerKey(key: string): void {
   }
 }
 
+export function isNativeApp(): boolean {
+  if (typeof window === 'undefined') return false;
+  const protocol = window.location.protocol;
+  return protocol === 'capacitor:' || protocol === 'file:' || (window as any).Capacitor !== undefined;
+}
+
 export const DEFAULT_PRODUCTION_API = 'https://ais-dev-l4g4u7bqaz6ibo5byvyh7i-215070016480.us-east5.run.app/api';
 
 export function getApiBaseUrl(): string {
@@ -77,16 +83,10 @@ export function getApiBaseUrl(): string {
     }
     return `${customUrl}/api`;
   }
-  if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol;
-    if (protocol === 'capacitor:' || protocol === 'file:') {
-      return DEFAULT_PRODUCTION_API;
-    }
+  if (isNativeApp()) {
+    return DEFAULT_PRODUCTION_API;
   }
-  if (!isCurrentOriginLocalhost()) {
-    return '/api';
-  }
-  return DEFAULT_PRODUCTION_API;
+  return '/api';
 }
 
 export function resolveUploadUrl(pathUrl: string): string {

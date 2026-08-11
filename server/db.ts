@@ -140,6 +140,13 @@ function createSchema(db: Database) {
       PRIMARY KEY (card_id, label_id)
     );
 
+    CREATE TABLE IF NOT EXISTS fart_triggers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      triggered_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      acknowledged INTEGER DEFAULT 0
+    );
+
     CREATE TABLE IF NOT EXISTS pdf_documents (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER DEFAULT 1,

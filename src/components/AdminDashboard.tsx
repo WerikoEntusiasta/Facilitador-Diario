@@ -14,6 +14,7 @@ import {
   UserX,
   Shield,
   Search,
+  Wind,
 } from 'lucide-react';
 import { User } from '../types';
 import { getServerUrl, getServerKey } from '../lib/api';
@@ -152,6 +153,35 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
       setUsers(users.filter((u) => u.id !== targetId));
       setSuccessMsg('Usuário excluído com sucesso.');
       setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleTriggerFart = async (targetId: number, name: string) => {
+    try {
+      const serverUrl = getServerUrl();
+      const serverKey = getServerKey();
+      const token = localStorage.getItem('kb_token');
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      if (serverKey) headers['x-server-key'] = serverKey;
+
+      const res = await fetch(`${serverUrl}/api/admin/users/${targetId}/fart`, {
+        method: 'POST',
+        headers,
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Erro ao disparar peido');
+      }
+
+      setSuccessMsg(`💨 Peido disparado com sucesso para ${name}! O celular do usuário tocará em instantes.`);
+      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
       setError(err.message);
     }
@@ -327,6 +357,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
                     </td>
 
                     <td className="py-3.5 px-4 text-right space-x-2">
+                      <button
+                        onClick={() => handleTriggerFart(u.id, u.name)}
+                        className="px-3 py-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-xl text-xs font-semibold hover:bg-amber-500/20 transition inline-flex items-center gap-1"
+                        title="Disparar som de peido no celular do usuário"
+                      >
+                        <Wind className="w-3.5 h-3.5" /> Disparar Peido
+                      </button>
+
                       <button
                         onClick={() => handleToggleAdmin(u.id, u.is_admin)}
                         className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition inline-flex items-center gap-1 ${

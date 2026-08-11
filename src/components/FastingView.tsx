@@ -18,6 +18,7 @@ import {
   Trash2,
   Award,
   Zap,
+  RotateCcw,
 } from 'lucide-react';
 import { FastingSession } from '../types';
 import {
@@ -34,6 +35,8 @@ interface FastingViewProps {
   onEndFasting: (notes?: string) => void;
   onCancelFasting: () => void;
   onAddWater: (ml: number) => void;
+  onUndoWater?: () => void;
+  onUpdateWaterGoal?: (goal: number) => void;
   onDeleteSession: (id: string) => void;
   showFloatingWidget: boolean;
   onToggleFloatingWidget: (show: boolean) => void;
@@ -62,6 +65,8 @@ export const FastingView: React.FC<FastingViewProps> = ({
   onEndFasting,
   onCancelFasting,
   onAddWater,
+  onUndoWater,
+  onUpdateWaterGoal,
   onDeleteSession,
   showFloatingWidget,
   onToggleFloatingWidget,
@@ -73,6 +78,39 @@ export const FastingView: React.FC<FastingViewProps> = ({
   const [customSeconds, setCustomSeconds] = useState<number>(0);
   const [isCustom, setIsCustom] = useState<boolean>(false);
   const [notes, setNotes] = useState<string>('');
+  
+  const [customWaterInput, setCustomWaterInput] = useState<string>('');
+  const [goalInput, setGoalInput] = useState<string>(activeSession?.water_goal ? String(activeSession.water_goal) : '2500');
+  const [isEditingGoal, setIsEditingGoal] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (activeSession?.water_goal) {
+      setGoalInput(String(activeSession.water_goal));
+    }
+  }, [activeSession?.water_goal]);
+
+  const waterGoal = activeSession?.water_goal || 2500;
+  const currentWater = activeSession?.water_ml || 0;
+  const waterProgress = Math.min(100, Math.round((currentWater / waterGoal) * 100));
+  const waterHistory = activeSession?.water_history || [];
+
+  const handleAddCustomWater = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseInt(customWaterInput, 10);
+    if (!isNaN(val) && val > 0) {
+      onAddWater(val);
+      setCustomWaterInput('');
+    }
+  };
+
+  const handleSaveGoal = (e: React.FormEvent) => {
+    e.preventDefault();
+    const val = parseInt(goalInput, 10);
+    if (!isNaN(val) && val > 0 && onUpdateWaterGoal) {
+      onUpdateWaterGoal(val);
+      setIsEditingGoal(false);
+    }
+  };
   
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [notified, setNotified] = useState<boolean>(false);
@@ -300,33 +338,94 @@ export const FastingView: React.FC<FastingViewProps> = ({
                 )}
               </div>
 
-              {/* Water Log Controls */}
-              <div className="bg-white/5 backdrop-blur-md p-4 rounded-2xl border border-white/10 mb-6 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">
-                    <Droplets className="w-5 h-5" />
+              {/* Water Log Controls & Goal */}
+              <div className="bg-white/5 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-white/10 mb-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center text-blue-400">
+                      <Droplets className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-white">Hidratação & Meta de Água</h4>
+                      <p className="text-xs text-blue-200 font-semibold">
+                        {currentWater} ml / {waterGoal} ml ({waterProgress}%)
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white">Hidratação durante o Jejum</h4>
-                    <p className="text-xs text-blue-200 font-semibold">
-                      Total ingerido: {activeSession.water_ml || 0} ml
-                    </p>
+
+                  <div className="flex items-center gap-2">
+                    {onUpdateWaterGoal && (
+                      <button
+                        onClick={() => setIsEditingGoal(!isEditingGoal)}
+                        className="text-[11px] text-indigo-300 hover:text-indigo-200 underline font-medium"
+                      >
+                        {isEditingGoal ? 'Cancelar' : 'Definir Meta'}
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => onAddWater(250)}
-                    className="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/40 text-blue-200 border border-blue-400/30 rounded-lg text-xs font-bold transition-colors"
-                  >
-                    +250ml
-                  </button>
-                  <button
-                    onClick={() => onAddWater(500)}
-                    className="px-3 py-1.5 bg-blue-500/20 hover:bg-blue-500/40 text-blue-200 border border-blue-400/30 rounded-lg text-xs font-bold transition-colors"
-                  >
-                    +500ml
-                  </button>
+                {/* Progress Bar */}
+                <div className="space-y-1.5">
+                  <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-white/10">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full transition-all duration-500"
+                      style={{ width: `${waterProgress}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Edit Goal Form */}
+                {isEditingGoal && (
+                  <form onSubmit={handleSaveGoal} className="flex items-center gap-2 pt-2 border-t border-white/10">
+                    <input
+                      type="number"
+                      value={goalInput}
+                      onChange={(e) => setGoalInput(e.target.value)}
+                      placeholder="Meta em ml (ex: 3000)"
+                      className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-blue-500"
+                      min="100"
+                      step="50"
+                    />
+                    <button
+                      type="submit"
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition"
+                    >
+                      Salvar Meta
+                    </button>
+                  </form>
+                )}
+
+                {/* Custom Water Input & Undo */}
+                <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 border-t border-white/10">
+                  <form onSubmit={handleAddCustomWater} className="flex-1 flex items-center gap-2 w-full">
+                    <input
+                      type="number"
+                      value={customWaterInput}
+                      onChange={(e) => setCustomWaterInput(e.target.value)}
+                      placeholder="Digite a quantidade em ml (ex: 300)"
+                      className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-400 focus:outline-none focus:border-blue-500"
+                      min="1"
+                      step="1"
+                    />
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shrink-0"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Adicionar Água
+                    </button>
+                  </form>
+
+                  {onUndoWater && waterHistory.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={onUndoWater}
+                      className="w-full sm:w-auto px-3 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1 shrink-0"
+                      title="Voltar atrás / Desfazer último registro de água"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" /> Voltar Atrás (-{waterHistory[waterHistory.length - 1]}ml)
+                    </button>
+                  )}
                 </div>
               </div>
 

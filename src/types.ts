@@ -164,6 +164,8 @@ export interface FastingSession {
   status: 'active' | 'completed' | 'cancelled';
   notes?: string;
   water_ml?: number;
+  water_goal?: number;
+  water_history?: number[];
   protocol_name?: string;
 }
 

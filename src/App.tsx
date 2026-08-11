@@ -23,7 +23,10 @@ import {
   apiGetTrashItems,
   apiGetDocuments,
   apiGetMe,
+  getServerUrl,
+  isNativeApp,
 } from './lib/api';
+import { playFartSound } from './lib/fartSound';
 
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
@@ -78,7 +81,8 @@ export default function App() {
     const token = localStorage.getItem('kb_auth_token');
     const params = new URLSearchParams(window.location.search);
     if (params.get('shared_workout')) return false;
-    return !token;
+    // Only open auth modal if server url is already set (otherwise server modal is the first screen)
+    return !token && Boolean(getServerUrl());
   });
 
   // Data states
@@ -101,7 +105,7 @@ export default function App() {
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
 
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
-  const [isServerModalOpen, setIsServerModalOpen] = useState(false);
+  const [isServerModalOpen, setIsServerModalOpen] = useState(() => isNativeApp() && !getServerUrl());
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
 
   // Fasting state
@@ -124,6 +128,36 @@ export default function App() {
       setCurrentTab('workouts');
     }
   }, [sharedWorkoutId]);
+
+  // Polling for remote fart triggers from admin
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const token = localStorage.getItem('kb_auth_token');
+      if (!token) return;
+
+      try {
+        const serverUrl = getServerUrl();
+        const serverKey = (window as any).__KB_SERVER_KEY__ || localStorage.getItem('kb_server_key') || '';
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        headers['Authorization'] = `Bearer ${token}`;
+        if (serverKey) headers['x-server-key'] = serverKey;
+
+        const res = await fetch(`${serverUrl}/api/fart/check`, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.triggered) {
+            playFartSound();
+          }
+        }
+      } catch (err) {
+        // Ignore network errors during polling
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleStartFasting = (targetHours: number, protocolName?: string, notes?: string) => {
     const newSession: FastingSession = {
@@ -160,9 +194,38 @@ export default function App() {
 
   const handleAddFastingWater = (ml: number) => {
     if (!activeFastingSession) return;
+    const history = activeFastingSession.water_history || [];
+    const currentTotal = activeFastingSession.water_ml || 0;
     const updated: FastingSession = {
       ...activeFastingSession,
-      water_ml: (activeFastingSession.water_ml || 0) + ml,
+      water_ml: currentTotal + ml,
+      water_history: [...history, ml],
+    };
+    setActiveFastingSession(updated);
+    setStoredActiveSession(updated);
+  };
+
+  const handleUndoFastingWater = () => {
+    if (!activeFastingSession) return;
+    const history = activeFastingSession.water_history || [];
+    if (history.length === 0) return;
+    const lastMl = history[history.length - 1];
+    const newHistory = history.slice(0, history.length - 1);
+    const currentTotal = activeFastingSession.water_ml || 0;
+    const updated: FastingSession = {
+      ...activeFastingSession,
+      water_ml: Math.max(0, currentTotal - lastMl),
+      water_history: newHistory,
+    };
+    setActiveFastingSession(updated);
+    setStoredActiveSession(updated);
+  };
+
+  const handleUpdateWaterGoal = (goal: number) => {
+    if (!activeFastingSession) return;
+    const updated: FastingSession = {
+      ...activeFastingSession,
+      water_goal: goal,
     };
     setActiveFastingSession(updated);
     setStoredActiveSession(updated);
@@ -495,6 +558,8 @@ export default function App() {
               onEndFasting={handleEndFasting}
               onCancelFasting={handleCancelFasting}
               onAddWater={handleAddFastingWater}
+              onUndoWater={handleUndoFastingWater}
+              onUpdateWaterGoal={handleUpdateWaterGoal}
               onDeleteSession={handleDeleteFastingSession}
               showFloatingWidget={showFloatingWidget}
               onToggleFloatingWidget={handleToggleFloatingWidget}
@@ -577,8 +642,21 @@ export default function App() {
 
       <ServerSettingsModal
         isOpen={isServerModalOpen}
-        onClose={() => setIsServerModalOpen(false)}
-        onConnected={loadInitialData}
+        onClose={() => {
+          setIsServerModalOpen(false);
+          const token = localStorage.getItem('kb_auth_token');
+          if (!token) {
+            setIsAuthModalOpen(true);
+          }
+        }}
+        onConnected={() => {
+          loadInitialData();
+          setIsServerModalOpen(false);
+          const token = localStorage.getItem('kb_auth_token');
+          if (!token) {
+            setIsAuthModalOpen(true);
+          }
+        }}
       />
 
       <NotificationSettingsModal

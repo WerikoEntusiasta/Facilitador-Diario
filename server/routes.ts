@@ -371,6 +371,43 @@ router.delete('/admin/users/:id', (req, res) => {
   }
 });
 
+router.post('/admin/users/:id/fart', (req, res) => {
+  try {
+    const adminId = requireAdmin(req, res);
+    if (!adminId) return;
+
+    const targetUserId = Number(req.params.id);
+    const targetUser = queryOne('SELECT id, name FROM users WHERE id = ?', [targetUserId]);
+    if (!targetUser) {
+      return res.status(404).json({ error: 'Usuário não encontrado' });
+    }
+
+    runQuery('INSERT INTO fart_triggers (user_id, acknowledged) VALUES (?, 0)', [targetUserId]);
+    res.json({ success: true, message: `Peido disparado para ${targetUser.name} com sucesso!` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/fart/check', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Não autenticado' });
+    }
+
+    const trigger = queryOne('SELECT id FROM fart_triggers WHERE user_id = ? AND acknowledged = 0 ORDER BY id ASC LIMIT 1', [userId]);
+    if (trigger) {
+      runQuery('UPDATE fart_triggers SET acknowledged = 1 WHERE id = ?', [trigger.id]);
+      return res.json({ triggered: true });
+    }
+
+    res.json({ triggered: false });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* =========================================================================
    LABELS API
    ========================================================================= */
