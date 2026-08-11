@@ -103,6 +103,7 @@ export interface User {
   name: string;
   email: string;
   avatar?: string;
+  is_admin?: number;
   created_at?: string;
 }
 
@@ -155,5 +156,38 @@ export interface VaultItem {
   updated_at?: string;
 }
 
-export type ViewTab = 'notes' | 'kanban' | 'calendar' | 'workouts' | 'pdfs' | 'vault' | 'archive' | 'trash';
+export interface FastingSession {
+  id: string;
+  target_hours: number;
+  start_time: string; // ISO date string
+  end_time?: string; // ISO date string if finished or ended early
+  status: 'active' | 'completed' | 'cancelled';
+  notes?: string;
+  water_ml?: number;
+  protocol_name?: string;
+}
+
+export type ViewTab = 'notes' | 'kanban' | 'calendar' | 'workouts' | 'fasting' | 'tasks' | 'widgets' | 'pdfs' | 'vault' | 'archive' | 'trash' | 'admin';
+
+export interface TaskItem {
+  id: string;
+  title: string;
+  description?: string;
+  completed: boolean;
+  dueDate?: string;
+  priority: 'Baixa' | 'Média' | 'Alta' | 'Urgente';
+  category?: string;
+  createdAt: string;
+}
+
+export interface NotificationSettings {
+  enabled: boolean;
+  notifyFasting: boolean;
+  notifyWorkout: boolean;
+  notifyTasks: boolean;
+  notifyCalendar: boolean;
+  soundEnabled: boolean;
+  bypassDND: boolean;
+  alertVolume: number;
+}
 

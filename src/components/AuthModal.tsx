@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { User, LogIn, UserPlus, X, Lock, Mail, UserCheck, ShieldCheck, Camera, Sparkles } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { User, LogIn, UserPlus, X, Lock, Mail, UserCheck, ShieldCheck, Camera, Upload, Trash2, Link as LinkIcon } from 'lucide-react';
 import { User as UserType } from '../types';
 import { apiLogin, apiRegister, apiUpdateProfile } from '../lib/api';
 
@@ -27,11 +27,68 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [email, setEmail] = useState(currentUser?.email || '');
   const [password, setPassword] = useState('');
   const [avatar, setAvatar] = useState(currentUser?.avatar || '');
+  const [showUrlInput, setShowUrlInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   if (!isOpen) return null;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Por favor, selecione um arquivo de imagem válido (PNG, JPG, WEBP).');
+      return;
+    }
+
+    // Limit file size before processing
+    if (file.size > 10 * 1024 * 1024) {
+      setError('A imagem deve ter no máximo 10MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_SIZE = 400; // max 400x400 for crisp avatar
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height *= MAX_SIZE / width;
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width *= MAX_SIZE / height;
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setAvatar(dataUrl);
+          setError(null);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+
+    // Reset input so re-selecting same file works
+    if (e.target) e.target.value = '';
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,8 +123,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
+  const displayAvatar = avatar || currentUser?.avatar || '';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
+      <input
+        type="file"
+        ref={fileInputRef}
+        accept="image/*"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
         {/* Header */}
         <div className="relative bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white flex flex-col items-center justify-center text-center">
@@ -80,15 +147,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </button>
           )}
 
-          <div className="w-16 h-16 rounded-full bg-white/10 p-1 backdrop-blur-md mb-3 flex items-center justify-center border border-white/20 shadow-inner">
-            {currentUser?.avatar ? (
+          <div
+            onClick={() => {
+              if (mode === 'register' || mode === 'profile') {
+                fileInputRef.current?.click();
+              }
+            }}
+            className={`relative w-20 h-20 rounded-full bg-white/10 p-1 backdrop-blur-md mb-3 flex items-center justify-center border border-white/20 shadow-inner group ${
+              mode === 'register' || mode === 'profile' ? 'cursor-pointer' : ''
+            }`}
+            title={mode === 'register' || mode === 'profile' ? 'Clique para enviar imagem do avatar' : undefined}
+          >
+            {displayAvatar ? (
               <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
+                src={displayAvatar}
+                alt={name || currentUser?.name || 'Avatar'}
                 className="w-full h-full rounded-full object-cover"
               />
             ) : (
-              <User className="w-8 h-8 text-white" />
+              <User className="w-10 h-10 text-white" />
+            )}
+
+            {(mode === 'register' || mode === 'profile') && (
+              <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-0.5 text-white">
+                <Camera className="w-5 h-5" />
+                <span className="text-[10px] font-semibold">Alterar</span>
+              </div>
             )}
           </div>
 
@@ -210,17 +294,57 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {(mode === 'register' || mode === 'profile') && (
             <div>
               <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
-                URL do Avatar (Opcional)
+                Foto do Avatar
               </label>
-              <div className="relative">
-                <Camera className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-                <input
-                  type="url"
-                  value={avatar}
-                  onChange={(e) => setAvatar(e.target.value)}
-                  placeholder="https://exemplo.com/foto.jpg"
-                  className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
-                />
+
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1 py-2 px-3 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Subir Imagem / Foto
+                  </button>
+
+                  {avatar && (
+                    <button
+                      type="button"
+                      onClick={() => setAvatar('')}
+                      className="py-2 px-3 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800/60 rounded-xl text-xs font-medium flex items-center justify-center gap-1 transition-colors"
+                      title="Remover foto"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Remover
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span>Formatos aceitos: PNG, JPG, WEBP</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowUrlInput(!showUrlInput)}
+                    className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                  >
+                    <LinkIcon className="w-3 h-3" />
+                    {showUrlInput ? 'Ocultar URL' : 'Ou colar URL'}
+                  </button>
+                </div>
+
+                {showUrlInput && (
+                  <div className="relative pt-1 animate-fadeIn">
+                    <Camera className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                    <input
+                      type="url"
+                      value={avatar}
+                      onChange={(e) => setAvatar(e.target.value)}
+                      placeholder="https://exemplo.com/foto.jpg"
+                      className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-white"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -19,9 +19,11 @@ import {
   Award,
   Share2,
   Info,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { WorkoutRoutine, WorkoutDay, Exercise } from '../types';
-import { apiGetWorkouts, apiCreateWorkout, apiUpdateWorkout, apiDeleteWorkout } from '../lib/api';
+import { apiGetWorkouts, apiCreateWorkout, apiUpdateWorkout, apiDeleteWorkout, apiGetSharedWorkout } from '../lib/api';
 
 const DAY_NAMES = [
   'Domingo',
@@ -182,10 +184,12 @@ const PRESET_ROUTINES: Array<{ title: string; description: string; days: Workout
   },
 ];
 
-export const WorkoutView: React.FC = () => {
+export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sharedWorkoutId }) => {
   const [workouts, setWorkouts] = useState<WorkoutRoutine[]>([]);
   const [activeWorkout, setActiveWorkout] = useState<WorkoutRoutine | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sharedWorkoutInfo, setSharedWorkoutInfo] = useState<(WorkoutRoutine & { author_name?: string }) | null>(null);
+  const [shareToast, setShareToast] = useState<string | null>(null);
 
   // Selected Day Index (0: Sun, 1: Mon, ..., 6: Sat)
   const [selectedDayIndex, setSelectedDayIndex] = useState<number>(() => {
@@ -214,14 +218,17 @@ export const WorkoutView: React.FC = () => {
 
   useEffect(() => {
     loadWorkouts();
-  }, []);
+    if (sharedWorkoutId) {
+      loadSharedWorkout(sharedWorkoutId);
+    }
+  }, [sharedWorkoutId]);
 
   const loadWorkouts = async () => {
     setLoading(true);
     try {
       const data = await apiGetWorkouts();
       setWorkouts(data);
-      if (data.length > 0) {
+      if (!sharedWorkoutId && data.length > 0) {
         setActiveWorkout(data[0]);
       }
     } catch (err) {
@@ -229,6 +236,50 @@ export const WorkoutView: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadSharedWorkout = async (id: number) => {
+    try {
+      const shared = await apiGetSharedWorkout(id);
+      setSharedWorkoutInfo(shared);
+    } catch (err) {
+      console.error('Erro ao carregar treino compartilhado:', err);
+    }
+  };
+
+  const handleImportSharedWorkout = async () => {
+    if (!sharedWorkoutInfo) return;
+    try {
+      const newW = await apiCreateWorkout({
+        title: `${sharedWorkoutInfo.title} (Cópia)`,
+        description: sharedWorkoutInfo.description || 'Importado via link de colega',
+        days: sharedWorkoutInfo.days,
+      });
+      setWorkouts([newW, ...workouts]);
+      setActiveWorkout(newW);
+      setSharedWorkoutInfo(null);
+      // Clean query string
+      window.history.replaceState({}, '', window.location.pathname);
+      setShareToast('Treino importado com sucesso para sua academia!');
+      setTimeout(() => setShareToast(null), 4000);
+    } catch (err) {
+      console.error('Erro ao importar treino:', err);
+    }
+  };
+
+  const handleShareWorkout = () => {
+    if (!activeWorkout) return;
+    const shareUrl = `${window.location.origin}/?shared_workout=${activeWorkout.id}`;
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setShareToast('Link de compartilhamento copiado! Envie para seus colegas seguirem o mesmo treino.');
+      setTimeout(() => setShareToast(null), 4000);
+    }).catch(() => {
+      prompt('Copie o link de compartilhamento abaixo:', shareUrl);
+    });
+  };
+
+  const handleDownloadPdf = () => {
+    window.print();
   };
 
   const handleToggleExercise = async (exerciseId: string) => {
@@ -341,6 +392,44 @@ export const WorkoutView: React.FC = () => {
     await apiUpdateWorkout(activeWorkout.id, { days: updatedDays });
   };
 
+  const handleMoveExerciseUp = async (index: number) => {
+    if (!activeWorkout || index <= 0) return;
+    const currentDay = activeWorkout.days[selectedDayIndex];
+    if (!currentDay) return;
+
+    const exercises = [...currentDay.exercises];
+    const temp = exercises[index];
+    exercises[index] = exercises[index - 1];
+    exercises[index - 1] = temp;
+
+    const updatedDays = activeWorkout.days.map((day, idx) =>
+      idx === selectedDayIndex ? { ...day, exercises } : day
+    );
+
+    const updatedWorkout = { ...activeWorkout, days: updatedDays };
+    setActiveWorkout(updatedWorkout);
+    await apiUpdateWorkout(activeWorkout.id, { days: updatedDays });
+  };
+
+  const handleMoveExerciseDown = async (index: number) => {
+    if (!activeWorkout) return;
+    const currentDay = activeWorkout.days[selectedDayIndex];
+    if (!currentDay || index >= currentDay.exercises.length - 1) return;
+
+    const exercises = [...currentDay.exercises];
+    const temp = exercises[index];
+    exercises[index] = exercises[index + 1];
+    exercises[index + 1] = temp;
+
+    const updatedDays = activeWorkout.days.map((day, idx) =>
+      idx === selectedDayIndex ? { ...day, exercises } : day
+    );
+
+    const updatedWorkout = { ...activeWorkout, days: updatedDays };
+    setActiveWorkout(updatedWorkout);
+    await apiUpdateWorkout(activeWorkout.id, { days: updatedDays });
+  };
+
   const handleSaveDayTitle = async () => {
     if (!activeWorkout) return;
 
@@ -393,6 +482,40 @@ export const WorkoutView: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
+      {shareToast && (
+        <div className="bg-emerald-600 text-white px-5 py-3 rounded-2xl text-xs font-bold shadow-xl flex items-center justify-between transition-all">
+          <span>{shareToast}</span>
+          <button onClick={() => setShareToast(null)} className="ml-3 text-white/80 hover:text-white">
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
+      {sharedWorkoutInfo && (
+        <div className="bg-gradient-to-r from-teal-600 via-emerald-600 to-indigo-700 rounded-3xl p-6 md:p-8 text-white shadow-xl space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold text-emerald-100">
+              <Sparkles size={14} className="text-amber-300 animate-pulse" /> Ficha Compartilhada por {sharedWorkoutInfo.author_name}
+            </div>
+            <button onClick={() => setSharedWorkoutInfo(null)} className="text-white/80 hover:text-white p-1">
+              <X size={18} />
+            </button>
+          </div>
+          <div>
+            <h2 className="text-2xl font-extrabold">{sharedWorkoutInfo.title}</h2>
+            <p className="text-xs text-emerald-100 mt-1">{sharedWorkoutInfo.description || 'Ficha de treino compartilhada para colegas seguirem.'}</p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <button
+              onClick={handleImportSharedWorkout}
+              className="px-6 py-3 bg-white text-emerald-800 hover:bg-emerald-50 font-extrabold text-xs rounded-xl shadow-lg transition flex items-center gap-2"
+            >
+              Seguir / Importar Este Treino Para Minha Academia
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top Banner Header */}
       <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-indigo-700 rounded-3xl p-6 md:p-8 text-white shadow-xl relative overflow-hidden">
         <div className="absolute right-0 top-0 bottom-0 opacity-10 pointer-events-none flex items-center pr-6">
@@ -434,13 +557,29 @@ export const WorkoutView: React.FC = () => {
             )}
 
             {activeWorkout && (
-              <button
-                onClick={() => handleDeleteWorkout(activeWorkout.id)}
-                className="p-2.5 bg-red-500/20 hover:bg-red-500/40 border border-red-300/30 text-white rounded-xl transition text-xs flex items-center gap-1.5"
-                title="Excluir este treino"
-              >
-                <Trash2 size={16} />
-              </button>
+              <>
+                <button
+                  onClick={handleShareWorkout}
+                  className="px-3.5 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/20 text-white rounded-xl transition text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+                  title="Compartilhar link com colegas"
+                >
+                  <Share2 size={16} /> Compartilhar Link
+                </button>
+                <button
+                  onClick={handleDownloadPdf}
+                  className="px-3.5 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/20 text-white rounded-xl transition text-xs font-semibold flex items-center gap-1.5 shadow-sm"
+                  title="Baixar ou imprimir PDF do treino"
+                >
+                  <Award size={16} /> Baixar PDF
+                </button>
+                <button
+                  onClick={() => handleDeleteWorkout(activeWorkout.id)}
+                  className="p-2.5 bg-red-500/20 hover:bg-red-500/40 border border-red-300/30 text-white rounded-xl transition text-xs flex items-center gap-1.5"
+                  title="Excluir este treino"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -716,6 +855,24 @@ export const WorkoutView: React.FC = () => {
                         </div>
 
                         <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleMoveExerciseUp(exIdx)}
+                            disabled={exIdx === 0}
+                            className={`p-1.5 rounded-lg ${exIdx === 0 ? 'text-slate-300 dark:text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                            title="Mover para cima"
+                          >
+                            <ArrowUp size={15} />
+                          </button>
+
+                          <button
+                            onClick={() => handleMoveExerciseDown(exIdx)}
+                            disabled={exIdx === currentDayData.exercises.length - 1}
+                            className={`p-1.5 rounded-lg ${exIdx === currentDayData.exercises.length - 1 ? 'text-slate-300 dark:text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                            title="Mover para baixo"
+                          >
+                            <ArrowDown size={15} />
+                          </button>
+
                           <button
                             onClick={() => {
                               setEditingExercise(ex);

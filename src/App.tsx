@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ViewTab, Note, Label, KanbanBoard, KanbanCard, User } from './types';
+import { ViewTab, Note, Label, KanbanBoard, KanbanCard, User, FastingSession } from './types';
 import {
   apiGetLabels,
   apiCreateLabel,
@@ -39,6 +39,21 @@ import { AuthModal } from './components/AuthModal';
 import { AndroidAppView } from './components/AndroidAppView';
 import { WorkoutView } from './components/WorkoutView';
 import { VaultView } from './components/VaultView';
+import { FastingView } from './components/FastingView';
+import { FloatingFastingWidget } from './components/FloatingFastingWidget';
+import { ServerSettingsModal } from './components/ServerSettingsModal';
+import { AdminDashboard } from './components/AdminDashboard';
+import { TasksView } from './components/TasksView';
+import { WidgetsHubView } from './components/WidgetsHubView';
+import { NotificationSettingsModal } from './components/NotificationSettingsModal';
+import {
+  getStoredActiveSession,
+  setStoredActiveSession,
+  getStoredFastingHistory,
+  setStoredFastingHistory,
+  getStoredFloatingWidgetState,
+  setStoredFloatingWidgetState,
+} from './lib/fastingStore';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<ViewTab>('notes');
@@ -84,6 +99,83 @@ export default function App() {
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
 
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
+  const [isServerModalOpen, setIsServerModalOpen] = useState(false);
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+
+  // Fasting state
+  const [activeFastingSession, setActiveFastingSession] = useState<FastingSession | null>(getStoredActiveSession);
+  const [fastingHistory, setFastingHistory] = useState<FastingSession[]>(getStoredFastingHistory);
+  const [showFloatingWidget, setShowFloatingWidget] = useState<boolean>(getStoredFloatingWidgetState);
+
+  const [sharedWorkoutId] = useState<number | null>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const sw = params.get('shared_workout');
+      return sw ? Number(sw) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    if (sharedWorkoutId) {
+      setCurrentTab('workouts');
+    }
+  }, [sharedWorkoutId]);
+
+  const handleStartFasting = (targetHours: number, protocolName?: string, notes?: string) => {
+    const newSession: FastingSession = {
+      id: String(Date.now()),
+      target_hours: targetHours,
+      start_time: new Date().toISOString(),
+      status: 'active',
+      protocol_name: protocolName,
+      water_ml: 0,
+      notes,
+    };
+    setActiveFastingSession(newSession);
+    setStoredActiveSession(newSession);
+  };
+
+  const handleEndFasting = () => {
+    if (!activeFastingSession) return;
+    const completedSession: FastingSession = {
+      ...activeFastingSession,
+      end_time: new Date().toISOString(),
+      status: 'completed',
+    };
+    const updatedHistory = [completedSession, ...fastingHistory];
+    setFastingHistory(updatedHistory);
+    setStoredFastingHistory(updatedHistory);
+    setActiveFastingSession(null);
+    setStoredActiveSession(null);
+  };
+
+  const handleCancelFasting = () => {
+    setActiveFastingSession(null);
+    setStoredActiveSession(null);
+  };
+
+  const handleAddFastingWater = (ml: number) => {
+    if (!activeFastingSession) return;
+    const updated: FastingSession = {
+      ...activeFastingSession,
+      water_ml: (activeFastingSession.water_ml || 0) + ml,
+    };
+    setActiveFastingSession(updated);
+    setStoredActiveSession(updated);
+  };
+
+  const handleDeleteFastingSession = (id: string) => {
+    const updated = fastingHistory.filter((s) => s.id !== id);
+    setFastingHistory(updated);
+    setStoredFastingHistory(updated);
+  };
+
+  const handleToggleFloatingWidget = (show: boolean) => {
+    setShowFloatingWidget(show);
+    setStoredFloatingWidgetState(show);
+  };
 
   useEffect(() => {
     if (darkMode) {
@@ -309,6 +401,7 @@ export default function App() {
         onOpenLabelManager={() => setIsLabelModalOpen(true)}
         currentUser={currentUser}
         onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenServerSettings={() => setIsServerModalOpen(true)}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -329,10 +422,13 @@ export default function App() {
           archiveCount={archiveCount}
           trashCount={trashCount}
           pdfCount={pdfCount}
+          currentUser={currentUser}
         />
 
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
+          {currentTab === 'admin' && <AdminDashboard currentUser={currentUser} />}
+
           {currentTab === 'notes' && (
             <KeepNotes
               notes={notes}
@@ -369,11 +465,45 @@ export default function App() {
 
           {currentTab === 'calendar' && <CalendarView />}
 
-          {currentTab === 'workouts' && <WorkoutView />}
+          {currentTab === 'tasks' && <TasksView />}
+
+          {currentTab === 'widgets' && (
+            <WidgetsHubView
+              activeSession={activeFastingSession}
+              onStartFasting={handleStartFasting}
+              onEndFasting={handleEndFasting}
+              onAddWater={handleAddFastingWater}
+              onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
+            />
+          )}
+
+          {currentTab === 'workouts' && <WorkoutView sharedWorkoutId={sharedWorkoutId} />}
+
+          {currentTab === 'fasting' && (
+            <FastingView
+              sessions={fastingHistory}
+              activeSession={activeFastingSession}
+              onStartFasting={handleStartFasting}
+              onEndFasting={handleEndFasting}
+              onCancelFasting={handleCancelFasting}
+              onAddWater={handleAddFastingWater}
+              onDeleteSession={handleDeleteFastingSession}
+              showFloatingWidget={showFloatingWidget}
+              onToggleFloatingWidget={handleToggleFloatingWidget}
+            />
+          )}
 
           {currentTab === 'vault' && <VaultView />}
 
           {currentTab === 'pdfs' && <PdfCenter />}
+
+          {currentTab === 'android_app' && (
+            <AndroidAppView
+              currentUser={currentUser}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
+              onOpenServerSettings={() => setIsServerModalOpen(true)}
+            />
+          )}
 
           {(currentTab === 'archive' || currentTab === 'trash') && (
             <ArchiveTrashView
@@ -436,6 +566,26 @@ export default function App() {
         onCreateLabel={handleCreateLabel}
         onDeleteLabel={handleDeleteLabel}
       />
+
+      <ServerSettingsModal
+        isOpen={isServerModalOpen}
+        onClose={() => setIsServerModalOpen(false)}
+        onConnected={loadInitialData}
+      />
+
+      <NotificationSettingsModal
+        isOpen={isNotificationModalOpen}
+        onClose={() => setIsNotificationModalOpen(false)}
+      />
+
+      {showFloatingWidget && activeFastingSession && (
+        <FloatingFastingWidget
+          activeSession={activeFastingSession}
+          onClose={() => handleToggleFloatingWidget(false)}
+          onEndFasting={handleEndFasting}
+          onAddWater={handleAddFastingWater}
+        />
+      )}
     </div>
   );
 }

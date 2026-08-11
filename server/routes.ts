@@ -144,13 +144,15 @@ router.post('/auth/register', (req, res) => {
 
     const password_hash = hashPassword(password);
     const defaultAvatar = avatar || `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150`;
+    const adminEmailEnv = (process.env.ADMIN_EMAIL || 'admin@keepflow.com').trim().toLowerCase();
+    const isAdminVal = cleanEmail === adminEmailEnv ? 1 : 0;
 
     const result = runQuery(
-      'INSERT INTO users (name, email, password_hash, avatar) VALUES (?, ?, ?, ?)',
-      [name.trim(), cleanEmail, password_hash, defaultAvatar]
+      'INSERT INTO users (name, email, password_hash, avatar, is_admin) VALUES (?, ?, ?, ?, ?)',
+      [name.trim(), cleanEmail, password_hash, defaultAvatar, isAdminVal]
     );
     const userId = result.lastInsertRowid;
-    const user = queryOne('SELECT id, name, email, avatar, created_at FROM users WHERE id = ?', [userId]);
+    const user = queryOne('SELECT id, name, email, avatar, is_admin, created_at FROM users WHERE id = ?', [userId]);
     const token = generateToken(userId);
 
     // Create initial labels for new user
@@ -185,13 +187,20 @@ router.post('/auth/login', (req, res) => {
     const password_hash = hashPassword(String(password));
 
     const user = queryOne(
-      'SELECT id, name, email, avatar, created_at FROM users WHERE email = ? AND password_hash = ?',
+      'SELECT id, name, email, avatar, is_admin, created_at FROM users WHERE email = ? AND password_hash = ?',
       [cleanEmail, password_hash]
     );
 
     if (!user) {
       return res.status(401).json({ error: 'E-mail ou senha incorretos' });
     }
+
+    const adminEmailEnv = (process.env.ADMIN_EMAIL || 'admin@keepflow.com').trim().toLowerCase();
+    if (user.email === adminEmailEnv && user.is_admin !== 1) {
+      runQuery('UPDATE users SET is_admin = 1 WHERE id = ?', [user.id]);
+      user.is_admin = 1;
+    }
+
     const token = generateToken(user.id);
     res.json({ user, token });
   } catch (err: any) {
@@ -205,10 +214,17 @@ router.get('/auth/me', (req, res) => {
     if (!userId) {
       return res.status(401).json({ error: 'Sessão expirada ou não autenticada' });
     }
-    const user = queryOne('SELECT id, name, email, avatar, created_at FROM users WHERE id = ?', [userId]);
+    const user = queryOne('SELECT id, name, email, avatar, is_admin, created_at FROM users WHERE id = ?', [userId]);
     if (!user) {
       return res.status(401).json({ error: 'Usuário não encontrado' });
     }
+
+    const adminEmailEnv = (process.env.ADMIN_EMAIL || 'admin@keepflow.com').trim().toLowerCase();
+    if (user.email === adminEmailEnv && user.is_admin !== 1) {
+      runQuery('UPDATE users SET is_admin = 1 WHERE id = ?', [user.id]);
+      user.is_admin = 1;
+    }
+
     res.json(user);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -238,8 +254,118 @@ router.put('/auth/profile', (req, res) => {
         userId
       ]);
     }
-    const user = queryOne('SELECT id, name, email, avatar, created_at FROM users WHERE id = ?', [userId]);
+    const user = queryOne('SELECT id, name, email, avatar, is_admin, created_at FROM users WHERE id = ?', [userId]);
     res.json(user);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* =========================================================================
+   ADMIN API
+   ========================================================================= */
+
+function requireAdmin(req: any, res: any): number | null {
+  const userId = getUserIdFromReq(req);
+  if (!userId) {
+    res.status(401).json({ error: 'Não autenticado' });
+    return null;
+  }
+  const user = queryOne('SELECT email, is_admin FROM users WHERE id = ?', [userId]);
+  const adminEmailEnv = (process.env.ADMIN_EMAIL || 'admin@keepflow.com').trim().toLowerCase();
+  if (user && user.email === adminEmailEnv) {
+    if (user.is_admin !== 1) {
+      runQuery('UPDATE users SET is_admin = 1 WHERE id = ?', [userId]);
+    }
+    return userId;
+  }
+  if (!user || user.is_admin !== 1) {
+    res.status(403).json({ error: 'Acesso negado: Requer privilégios de Administrador' });
+    return null;
+  }
+  return userId;
+}
+
+router.get('/admin/stats', (req, res) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+
+    const totalUsers = queryOne('SELECT COUNT(*) as count FROM users', []).count;
+    const totalNotes = queryOne('SELECT COUNT(*) as count FROM notes', []).count;
+    const totalWorkouts = queryOne('SELECT COUNT(*) as count FROM workouts', []).count;
+    const totalVault = queryOne('SELECT COUNT(*) as count FROM vault_items', []).count;
+    const totalPdfs = queryOne('SELECT COUNT(*) as count FROM pdf_documents', []).count;
+
+    res.json({
+      totalUsers,
+      totalNotes,
+      totalWorkouts,
+      totalVault,
+      totalPdfs,
+      serverTime: new Date().toISOString(),
+      uptime: process.uptime(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/admin/users', (req, res) => {
+  try {
+    if (!requireAdmin(req, res)) return;
+
+    const users = queryAll('SELECT id, name, email, avatar, is_admin, created_at FROM users ORDER BY created_at DESC', []);
+    res.json(users);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/admin/users/:id/admin', (req, res) => {
+  try {
+    const adminId = requireAdmin(req, res);
+    if (!adminId) return;
+
+    const targetUserId = Number(req.params.id);
+    const { is_admin } = req.body;
+    const newAdminVal = is_admin ? 1 : 0;
+
+    // Prevent demoting yourself if you're the last admin
+    if (targetUserId === adminId && newAdminVal === 0) {
+      const otherAdmins = queryOne('SELECT COUNT(*) as count FROM users WHERE is_admin = 1 AND id != ?', [adminId]);
+      if (otherAdmins.count === 0) {
+        return res.status(400).json({ error: 'Você não pode remover seu status de admin pois é o único administrador ativo.' });
+      }
+    }
+
+    runQuery('UPDATE users SET is_admin = ? WHERE id = ?', [newAdminVal, targetUserId]);
+    const updated = queryOne('SELECT id, name, email, avatar, is_admin, created_at FROM users WHERE id = ?', [targetUserId]);
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/admin/users/:id', (req, res) => {
+  try {
+    const adminId = requireAdmin(req, res);
+    if (!adminId) return;
+
+    const targetUserId = Number(req.params.id);
+    if (targetUserId === adminId) {
+      return res.status(400).json({ error: 'Você não pode excluir sua própria conta de administrador.' });
+    }
+
+    // Delete user data and user
+    runQuery('DELETE FROM notes WHERE user_id = ?', [targetUserId]);
+    runQuery('DELETE FROM kanban_cards WHERE board_id IN (SELECT id FROM kanban_boards WHERE user_id = ?)', [targetUserId]);
+    runQuery('DELETE FROM kanban_columns WHERE board_id IN (SELECT id FROM kanban_boards WHERE user_id = ?)', [targetUserId]);
+    runQuery('DELETE FROM kanban_boards WHERE user_id = ?', [targetUserId]);
+    runQuery('DELETE FROM labels WHERE user_id = ?', [targetUserId]);
+    runQuery('DELETE FROM vault_items WHERE user_id = ?', [targetUserId]);
+    runQuery('DELETE FROM users WHERE id = ?', [targetUserId]);
+
+    res.json({ success: true, id: targetUserId });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -1271,6 +1397,27 @@ router.delete('/workouts/:id', (req, res) => {
     }
     runQuery('DELETE FROM workouts WHERE id = ? AND user_id = ?', [id, userId]);
     res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public shared workout endpoint
+router.get('/workouts/shared/:id', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const r = queryOne('SELECT w.*, u.name as author_name FROM workouts w LEFT JOIN users u ON w.user_id = u.id WHERE w.id = ?', [id]);
+    if (!r) {
+      return res.status(404).json({ error: 'Treino compartilhado não encontrado' });
+    }
+    res.json({
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      author_name: r.author_name || 'Usuário KeepFlow',
+      days: JSON.parse(r.days_json || '[]'),
+      created_at: r.created_at,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

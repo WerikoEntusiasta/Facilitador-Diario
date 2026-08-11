@@ -70,6 +70,7 @@ function createSchema(db: Database) {
       email TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
       avatar TEXT DEFAULT '',
+      is_admin INTEGER DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -185,6 +186,7 @@ function createSchema(db: Database) {
   `);
 
   // Ensure columns exist on existing databases
+  safeAddColumn(db, 'users', 'is_admin INTEGER DEFAULT 0');
   safeAddColumn(db, 'labels', 'user_id INTEGER DEFAULT 1');
   safeAddColumn(db, 'notes', 'user_id INTEGER DEFAULT 1');
   safeAddColumn(db, 'notes', "attachments TEXT DEFAULT '[]'");
@@ -201,6 +203,25 @@ function createSchema(db: Database) {
     db.run("DELETE FROM users WHERE email = 'demo@keepboard.app'");
   } catch (e) {
     // Ignore if table/user not present
+  }
+
+  // Seed default Admin Account if it doesn't exist or update password/email if env changes
+  try {
+    const adminEmail = (process.env.ADMIN_EMAIL || 'admin@keepflow.com').trim().toLowerCase();
+    const adminPass = process.env.ADMIN_PASSWORD || 'admin123456';
+    const adminPassHash = crypto.pbkdf2Sync(adminPass, 'keepflow-salt-2026', 10000, 64, 'sha512').toString('hex');
+    const adminCheck = db.exec(`SELECT id FROM users WHERE email = '${adminEmail}'`);
+    if (adminCheck.length === 0 || adminCheck[0].values.length === 0) {
+      const adminAvatar = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
+      db.run(
+        `INSERT INTO users (name, email, password_hash, avatar, is_admin) VALUES (?, ?, ?, ?, 1)`,
+        ['Administrador Master', adminEmail, adminPassHash, adminAvatar]
+      );
+    } else {
+      db.run(`UPDATE users SET is_admin = 1, password_hash = ? WHERE email = ?`, [adminPassHash, adminEmail]);
+    }
+  } catch (e) {
+    console.error('Error seeding admin user:', e);
   }
 
   const workoutCheck = db.exec('SELECT COUNT(*) as count FROM workouts');

@@ -12,8 +12,11 @@ import {
   CheckCircle2,
   Dumbbell,
   ShieldCheck,
+  Flame,
+  Shield,
+  CheckSquare,
 } from 'lucide-react';
-import { ViewTab, Label } from '../types';
+import { ViewTab, Label, User } from '../types';
 
 interface SidebarProps {
   currentTab: ViewTab;
@@ -28,6 +31,7 @@ interface SidebarProps {
   archiveCount?: number;
   trashCount?: number;
   pdfCount?: number;
+  currentUser?: User | null;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -43,17 +47,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
   archiveCount,
   trashCount,
   pdfCount,
+  currentUser,
 }) => {
   const navItems = [
     { id: 'notes' as ViewTab, label: 'Notas (Keep)', icon: FileText, count: notesCount },
     { id: 'kanban' as ViewTab, label: 'Quadros Kanban', icon: Kanban },
+    { id: 'tasks' as ViewTab, label: 'Menu Tarefas', icon: CheckSquare },
     { id: 'calendar' as ViewTab, label: 'Calendário & Lembretes', icon: Calendar },
     { id: 'workouts' as ViewTab, label: 'Treinos da Academia', icon: Dumbbell },
+    { id: 'fasting' as ViewTab, label: 'Jejum Intermitente', icon: Flame },
     { id: 'vault' as ViewTab, label: 'Cofre de Senhas', icon: ShieldCheck },
     { id: 'pdfs' as ViewTab, label: 'Central de PDFs', icon: FileCheck, count: pdfCount },
     { id: 'archive' as ViewTab, label: 'Arquivados', icon: FolderArchive, count: archiveCount },
     { id: 'trash' as ViewTab, label: 'Lixeira', icon: Trash2, count: trashCount },
   ];
+
+  if (currentUser?.is_admin === 1) {
+    navItems.unshift({
+      id: 'admin' as ViewTab,
+      label: 'Painel Admin Master',
+      icon: Shield,
+    });
+  }
 
   const handleTabClick = (tab: ViewTab) => {
     onTabChange(tab);

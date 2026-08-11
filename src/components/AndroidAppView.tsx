@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Download, QrCode, Database, CheckCircle2, ShieldCheck, Wifi, ExternalLink, Sparkles, User, Box, Play, Laptop, ChevronRight, Server } from 'lucide-react';
+import { Smartphone, Download, QrCode, Database, CheckCircle2, ShieldCheck, Wifi, ExternalLink, Sparkles, User, Box, Play, Laptop, ChevronRight, Server, Flame, Layers } from 'lucide-react';
 import { User as UserType } from '../types';
+import { AndroidWidgetCodeModal } from './AndroidWidgetCodeModal';
 
 interface AndroidAppViewProps {
   currentUser: UserType | null;
@@ -13,6 +14,7 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [installSuccess, setInstallSuccess] = useState(false);
+  const [isWidgetModalOpen, setIsWidgetModalOpen] = useState(false);
 
   const appUrl = window.location.href;
 
@@ -101,9 +103,22 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
                 Configurar URL do Servidor Remoto
               </button>
             )}
+
+            <button
+              onClick={() => setIsWidgetModalOpen(true)}
+              className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Layers className="w-4 h-4" />
+              Ver Widgets Nativos (AppWidgets)
+            </button>
           </div>
         </div>
       </div>
+
+      <AndroidWidgetCodeModal
+        isOpen={isWidgetModalOpen}
+        onClose={() => setIsWidgetModalOpen(false)}
+      />
 
       {/* Main Grid: Features & Simulator */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -257,6 +272,21 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
                 <p className="mt-2"># 2. Abrir o projeto no Android Studio e gerar APK</p>
                 <p className="text-white">npx cap open android</p>
               </div>
+            </div>
+
+            {/* Fasting Widget Android Support */}
+            <div className="p-4 bg-amber-950/40 rounded-xl border border-amber-800/60 space-y-2">
+              <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                <Flame className="w-4 h-4 text-amber-400" /> Widget de Jejum Intermitente na Tela Inicial
+              </span>
+              <p className="text-xs text-slate-300">
+                O aplicativo inclui um <strong>Widget de Jejum</strong> dedicado. No Android:
+              </p>
+              <ul className="text-xs text-slate-300 space-y-1 list-disc list-inside">
+                <li>Você pode ativar o <strong>Mini-Widget Flutuante</strong> que se sobrepõe na tela e contagem contínua.</li>
+                <li>Ao instalar como PWA/WebAPK, o atalho do widget de rápida inicialização (12h, 16h, 18h) fica disponível na Tela Inicial.</li>
+                <li>Receba alertas com alarme sonoro sintetizado e notificações push assim que a meta de jejum for concluída.</li>
+              </ul>
             </div>
 
             {/* Option 3: Bubblewrap CLI */}

@@ -15,13 +15,39 @@ import {
 } from '../types';
 
 // DYNAMIC SERVER CONNECTION CONFIGURATION
+export function isLocalhostUrl(url: string): boolean {
+  if (!url) return false;
+  const clean = url.trim().toLowerCase();
+  return (
+    clean.includes('localhost') ||
+    clean.includes('127.0.0.1') ||
+    clean.includes('::1') ||
+    clean.includes('0.0.0.0') ||
+    clean.startsWith('file:') ||
+    clean.startsWith('capacitor:')
+  );
+}
+
+export function isCurrentOriginLocalhost(): boolean {
+  if (typeof window === 'undefined') return false;
+  return isLocalhostUrl(window.location.href) || isLocalhostUrl(window.location.hostname);
+}
+
 export function getServerUrl(): string {
-  return (localStorage.getItem('kb_server_url') || '').trim().replace(/\/+$/, '');
+  const saved = (localStorage.getItem('kb_server_url') || '').trim().replace(/\/+$/, '');
+  if (saved && isLocalhostUrl(saved)) {
+    localStorage.removeItem('kb_server_url');
+    return '';
+  }
+  return saved;
 }
 
 export function setServerUrl(url: string): void {
   const clean = url.trim().replace(/\/+$/, '');
   if (clean) {
+    if (isLocalhostUrl(clean)) {
+      throw new Error('Atenção: Conexão via Localhost (127.0.0.1) é proibida. Informe o IP público ou domínio do seu servidor remoto.');
+    }
     localStorage.setItem('kb_server_url', clean);
   } else {
     localStorage.removeItem('kb_server_url');
@@ -43,7 +69,16 @@ export function setServerKey(key: string): void {
 
 export function getApiBaseUrl(): string {
   const customUrl = getServerUrl();
-  return customUrl ? `${customUrl}/api` : '/api';
+  if (customUrl) {
+    if (isLocalhostUrl(customUrl)) {
+      throw new Error('Localhost é proibido. Por favor, configure um Servidor Remoto válido.');
+    }
+    return `${customUrl}/api`;
+  }
+  if (!isCurrentOriginLocalhost()) {
+    return '/api';
+  }
+  throw new Error('Localhost é proibido. Configure o IP ou Domínio do seu Servidor Remoto para conectar ao aplicativo.');
 }
 
 export function resolveUploadUrl(pathUrl: string): string {
@@ -58,8 +93,23 @@ export function resolveUploadUrl(pathUrl: string): string {
 
 export async function testServerConnection(targetUrl?: string, targetKey?: string): Promise<{ success: boolean; message: string; data?: any }> {
   try {
-    const baseUrl = targetUrl !== undefined ? targetUrl.trim().replace(/\/+$/, '') : getServerUrl();
-    const apiUrl = baseUrl ? `${baseUrl}/api/health` : '/api/health';
+    const urlToTest = targetUrl !== undefined ? targetUrl.trim().replace(/\/+$/, '') : getServerUrl();
+    
+    if (urlToTest && isLocalhostUrl(urlToTest)) {
+      return {
+        success: false,
+        message: 'Atenção: Uso de Localhost (127.0.0.1) é proibido. Digite o IP público ou domínio do seu servidor remoto (ex: http://45.167.187.80:8948).'
+      };
+    }
+
+    if (!urlToTest && isCurrentOriginLocalhost()) {
+      return {
+        success: false,
+        message: 'Atenção: Você está acessando via Localhost. É obrigatório informar o IP ou domínio do seu servidor remoto para conectar.'
+      };
+    }
+
+    const apiUrl = urlToTest ? `${urlToTest}/api/health` : '/api/health';
     const key = targetKey !== undefined ? targetKey.trim() : getServerKey();
     
     const headers: Record<string, string> = {};
@@ -72,9 +122,9 @@ export async function testServerConnection(targetUrl?: string, targetKey?: strin
       return { success: false, message: `Servidor respondeu com erro HTTP ${res.status}` };
     }
     const data = await res.json();
-    return { success: true, message: 'Conexão com o servidor realizada com sucesso!', data };
+    return { success: true, message: 'Conexão com o servidor remoto estabelecida com sucesso!', data };
   } catch (err: any) {
-    return { success: false, message: err.message || 'Falha ao conectar no servidor. Verifique a URL e se a porta do container está aberta.' };
+    return { success: false, message: err.message || 'Falha ao conectar no servidor. Verifique a URL do Servidor Remoto.' };
   }
 }
 
@@ -282,6 +332,7 @@ export const apiEmptyTrash = () => request<{ success: boolean }>('/trash/empty',
 
 // WORKOUT API
 export const apiGetWorkouts = () => request<WorkoutRoutine[]>('/workouts');
+export const apiGetSharedWorkout = (id: number) => request<WorkoutRoutine & { author_name?: string }>(`/workouts/shared/${id}`);
 export const apiCreateWorkout = (data: Partial<WorkoutRoutine>) =>
   request<WorkoutRoutine>('/workouts', {
     method: 'POST',

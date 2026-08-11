@@ -7,8 +7,7 @@ import {
   X,
   Tag,
   User as UserIcon,
-  CheckCircle2,
-  Dumbbell,
+  Server,
 } from 'lucide-react';
 import { ViewTab, User } from '../types';
 
@@ -26,6 +25,7 @@ interface NavbarProps {
   onOpenLabelManager: () => void;
   currentUser: User | null;
   onOpenAuth: () => void;
+  onOpenServerSettings?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -40,6 +40,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenLabelManager,
   currentUser,
   onOpenAuth,
+  onOpenServerSettings,
 }) => {
   const getTabTitle = () => {
     switch (currentTab) {
@@ -51,6 +52,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         return 'Calendário & Lembretes';
       case 'workouts':
         return 'Treinos & Rotina Semanal';
+      case 'fasting':
+        return 'Sessão de Jejum Intermitente';
+      case 'vault':
+        return 'Cofre de Senhas Criptografado';
       case 'pdfs':
         return 'Central de PDFs';
       case 'archive':
@@ -112,6 +117,17 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Action buttons */}
         <div className="flex items-center gap-1.5">
+          {onOpenServerSettings && (
+            <button
+              onClick={onOpenServerSettings}
+              className="p-2 rounded-xl text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition flex items-center gap-1.5 text-xs font-semibold border border-blue-200/60 dark:border-blue-800/60"
+              title="Configurar Servidor Remoto"
+            >
+              <Server size={17} />
+              <span className="hidden xl:inline">Servidor</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenLabelManager}
             className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"
