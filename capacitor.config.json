@@ -2,9 +2,5 @@
   "appId": "com.keepflow.app",
   "appName": "KeepFlow",
   "webDir": "dist",
-  "bundledWebRuntime": false,
-  "server": {
-    "url": "https://ais-dev-l4g4u7bqaz6ibo5byvyh7i-215070016480.us-east5.run.app",
-    "cleartext": true
-  }
+  "bundledWebRuntime": false
 }

@@ -8,6 +8,7 @@ import {
   Tag,
   User as UserIcon,
   Server,
+  RefreshCw,
 } from 'lucide-react';
 import { ViewTab, User } from '../types';
 
@@ -42,6 +43,18 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
   onOpenServerSettings,
 }) => {
+  const handleUpdateApp = () => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (let registration of registrations) {
+          registration.update();
+        }
+      });
+    }
+    const cleanUrl = window.location.href.split('?')[0].split('#')[0];
+    window.location.replace(`${cleanUrl}?v=${Date.now()}`);
+  };
+
   const getTabTitle = () => {
     switch (currentTab) {
       case 'notes':
@@ -117,6 +130,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Action buttons */}
         <div className="flex items-center gap-1.5">
+          <button
+            onClick={handleUpdateApp}
+            className="p-2 rounded-xl text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition flex items-center gap-1.5 text-xs font-semibold border border-emerald-200/60 dark:border-emerald-800/60"
+            title="Atualizar App para a versão mais recente"
+          >
+            <RefreshCw size={17} />
+            <span className="hidden xl:inline">Atualizar</span>
+          </button>
+
           {onOpenServerSettings && (
             <button
               onClick={onOpenServerSettings}

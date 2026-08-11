@@ -1661,6 +1661,15 @@ router.delete('/vault/items/:id', (req, res) => {
    ANDROID APK PACKAGE ROUTE
    ========================================================================= */
 
+const SERVER_BOOT_TIME = Date.now();
+
+router.get('/version', (req, res) => {
+  res.json({
+    version: '1.0.0',
+    buildTimestamp: SERVER_BOOT_TIME,
+  });
+});
+
 router.get('/health', (req, res) => {
   res.json({
     status: 'ok',

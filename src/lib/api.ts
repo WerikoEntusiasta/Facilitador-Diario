@@ -67,6 +67,8 @@ export function setServerKey(key: string): void {
   }
 }
 
+export const DEFAULT_PRODUCTION_API = 'https://ais-dev-l4g4u7bqaz6ibo5byvyh7i-215070016480.us-east5.run.app/api';
+
 export function getApiBaseUrl(): string {
   const customUrl = getServerUrl();
   if (customUrl) {
@@ -75,10 +77,16 @@ export function getApiBaseUrl(): string {
     }
     return `${customUrl}/api`;
   }
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol;
+    if (protocol === 'capacitor:' || protocol === 'file:') {
+      return DEFAULT_PRODUCTION_API;
+    }
+  }
   if (!isCurrentOriginLocalhost()) {
     return '/api';
   }
-  throw new Error('Localhost é proibido. Configure o IP ou Domínio do seu Servidor Remoto para conectar ao aplicativo.');
+  return DEFAULT_PRODUCTION_API;
 }
 
 export function resolveUploadUrl(pathUrl: string): string {

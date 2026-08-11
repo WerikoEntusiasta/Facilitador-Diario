@@ -15,6 +15,7 @@ import {
   Flame,
   Shield,
   CheckSquare,
+  RefreshCw,
 } from 'lucide-react';
 import { ViewTab, Label, User } from '../types';
 
@@ -195,6 +196,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
             <span>SQLite Ativo</span>
           </div>
+          <button
+            onClick={() => {
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then((registrations) => {
+                  for (let registration of registrations) {
+                    registration.update();
+                  }
+                });
+              }
+              const cleanUrl = window.location.href.split('?')[0].split('#')[0];
+              window.location.replace(`${cleanUrl}?v=${Date.now()}`);
+            }}
+            className="flex items-center gap-1 px-2 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition font-semibold"
+            title="Atualizar Aplicativo"
+          >
+            <RefreshCw size={13} />
+            <span>Atualizar</span>
+          </button>
         </div>
       </aside>
     </>
