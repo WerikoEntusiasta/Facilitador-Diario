@@ -191,6 +191,29 @@ export const KeepNotes: React.FC<KeepNotesProps> = ({
             </div>
           ) : (
             <div className="space-y-3">
+              {/* Templates */}
+              <div className="flex items-center gap-1.5 pb-2 border-b border-black/5 dark:border-white/5 overflow-x-auto text-[11px]">
+                <span className="text-slate-400 font-semibold mr-1">Modelos:</span>
+                {[
+                  { label: 'Reunião', t: 'Pauta de Reunião', c: 'Participantes:\n- \n\nTópicos:\n1. \n\nDecisões:\n- ' },
+                  { label: 'Compras', t: 'Lista de Compras', c: '- [ ] Leite\n- [ ] Pão\n- [ ] Café\n- [ ] Frutas' },
+                  { label: 'Brainstorm', t: 'Ideias & Insights', c: 'Problema:\n\nSoluções propostas:\n1. \n2. ' },
+                  { label: 'Diário', t: 'Diário de Bordo', c: 'Como me sinto hoje:\n\nPrincipais conquistas:\n\nGratidão por:' },
+                ].map((tpl) => (
+                  <button
+                    key={tpl.label}
+                    type="button"
+                    onClick={() => {
+                      setTitle(tpl.t);
+                      setContent(tpl.c);
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-indigo-600 hover:text-white text-slate-600 dark:text-slate-300 transition whitespace-nowrap font-medium"
+                  >
+                    {tpl.label}
+                  </button>
+                ))}
+              </div>
+
               {/* Title & Pin */}
               <div className="flex items-center justify-between gap-2">
                 <input

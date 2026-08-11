@@ -69,6 +69,8 @@ export const FastingView: React.FC<FastingViewProps> = ({
   const [selectedHours, setSelectedHours] = useState<number>(16);
   const [selectedProtocolName, setSelectedProtocolName] = useState<string>('16:8 Intermitente');
   const [customHours, setCustomHours] = useState<number>(16);
+  const [customMinutes, setCustomMinutes] = useState<number>(0);
+  const [customSeconds, setCustomSeconds] = useState<number>(0);
   const [isCustom, setIsCustom] = useState<boolean>(false);
   const [notes, setNotes] = useState<string>('');
   
@@ -122,8 +124,12 @@ export const FastingView: React.FC<FastingViewProps> = ({
   };
 
   const handleStart = () => {
-    const target = isCustom ? customHours : selectedHours;
-    const protocol = isCustom ? `Personalizado ${customHours}h` : selectedProtocolName;
+    let target = selectedHours;
+    let protocol = selectedProtocolName;
+    if (isCustom) {
+      target = customHours + customMinutes / 60 + customSeconds / 3600;
+      protocol = `Personalizado ${String(customHours).padStart(2, '0')}:${String(customMinutes).padStart(2, '0')}:${String(customSeconds).padStart(2, '0')}`;
+    }
     requestFastingNotificationPermission();
     onStartFasting(target, protocol, notes);
     setNotes('');
@@ -407,18 +413,40 @@ export const FastingView: React.FC<FastingViewProps> = ({
                   </div>
 
                   {isCustom && (
-                    <div className="pt-2 flex items-center gap-3">
-                      <input
-                        type="number"
-                        min="1"
-                        max="72"
-                        value={customHours}
-                        onChange={(e) => setCustomHours(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-24 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                      />
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                        Horas de Jejum
-                      </span>
+                    <div className="pt-3 grid grid-cols-3 gap-3">
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block mb-1">Horas</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="168"
+                          value={customHours}
+                          onChange={(e) => setCustomHours(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block mb-1">Minutos</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          value={customMinutes}
+                          onChange={(e) => setCustomMinutes(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block mb-1">Segundos</label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="59"
+                          value={customSeconds}
+                          onChange={(e) => setCustomSeconds(Math.min(59, Math.max(0, parseInt(e.target.value) || 0)))}
+                          className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
                     </div>
                   )}
                 </div>

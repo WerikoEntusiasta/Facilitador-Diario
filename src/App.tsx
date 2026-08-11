@@ -76,6 +76,8 @@ export default function App() {
   });
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(() => {
     const token = localStorage.getItem('kb_auth_token');
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('shared_workout')) return false;
     return !token;
   });
 
@@ -194,9 +196,13 @@ export default function App() {
 
   const checkCurrentUser = async () => {
     const token = localStorage.getItem('kb_auth_token');
+    const params = new URLSearchParams(window.location.search);
+    const hasSharedWorkout = !!params.get('shared_workout');
     if (!token) {
       setCurrentUser(null);
-      setIsAuthModalOpen(true);
+      if (!hasSharedWorkout) {
+        setIsAuthModalOpen(true);
+      }
       return;
     }
     try {
@@ -207,7 +213,9 @@ export default function App() {
       setCurrentUser(null);
       localStorage.removeItem('kb_auth_token');
       localStorage.removeItem('kb_auth_user');
-      setIsAuthModalOpen(true);
+      if (!hasSharedWorkout) {
+        setIsAuthModalOpen(true);
+      }
     }
   };
 

@@ -21,6 +21,7 @@ import {
   Info,
   ArrowUp,
   ArrowDown,
+  GripVertical,
 } from 'lucide-react';
 import { WorkoutRoutine, WorkoutDay, Exercise } from '../types';
 import { apiGetWorkouts, apiCreateWorkout, apiUpdateWorkout, apiDeleteWorkout, apiGetSharedWorkout } from '../lib/api';
@@ -216,6 +217,9 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
   const [isNewWorkoutOpen, setIsNewWorkoutOpen] = useState(false);
   const [newRoutineTitle, setNewRoutineTitle] = useState('');
 
+  // Drag and Drop State
+  const [draggedExerciseIndex, setDraggedExerciseIndex] = useState<number | null>(null);
+
   useEffect(() => {
     loadWorkouts();
     if (sharedWorkoutId) {
@@ -242,6 +246,15 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
     try {
       const shared = await apiGetSharedWorkout(id);
       setSharedWorkoutInfo(shared);
+      setActiveWorkout({
+        id: shared.id,
+        user_id: 0,
+        title: shared.title,
+        description: shared.description,
+        days: shared.days,
+        created_at: shared.created_at,
+        updated_at: shared.created_at,
+      });
     } catch (err) {
       console.error('Erro ao carregar treino compartilhado:', err);
     }
@@ -428,6 +441,42 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
     const updatedWorkout = { ...activeWorkout, days: updatedDays };
     setActiveWorkout(updatedWorkout);
     await apiUpdateWorkout(activeWorkout.id, { days: updatedDays });
+  };
+
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedExerciseIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedExerciseIndex === null || draggedExerciseIndex === targetIndex) return;
+    if (!activeWorkout) return;
+    const currentDay = activeWorkout.days[selectedDayIndex];
+    if (!currentDay) return;
+
+    const exercises = [...currentDay.exercises];
+    const [movedItem] = exercises.splice(draggedExerciseIndex, 1);
+    exercises.splice(targetIndex, 0, movedItem);
+
+    setDraggedExerciseIndex(null);
+
+    const updatedDays = activeWorkout.days.map((day, idx) =>
+      idx === selectedDayIndex ? { ...day, exercises } : day
+    );
+
+    const updatedWorkout = { ...activeWorkout, days: updatedDays };
+    setActiveWorkout(updatedWorkout);
+    try {
+      await apiUpdateWorkout(activeWorkout.id, { days: updatedDays });
+    } catch (err) {
+      console.error('Erro ao reordenar exercício por drag & drop:', err);
+    }
   };
 
   const handleSaveDayTitle = async () => {
@@ -800,14 +849,27 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
                   {currentDayData.exercises.map((ex, exIdx) => (
                     <div
                       key={ex.id || exIdx}
-                      className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                      draggable={true}
+                      onDragStart={(e) => handleDragStart(e, exIdx)}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, exIdx)}
+                      className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-grab active:cursor-grabbing ${
+                        draggedExerciseIndex === exIdx ? 'opacity-40 border-dashed border-indigo-500' : ''
+                      } ${
                         ex.completed
-                          ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/50 opacity-80'
+                          ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/50'
                           : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600'
                       }`}
                     >
-                      {/* Left: Checkbox & Name */}
+                      {/* Left: Drag Handle, Checkbox & Name */}
                       <div className="flex items-start sm:items-center gap-3">
+                        <div
+                          className="text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 cursor-grab active:cursor-grabbing mt-1 sm:mt-0"
+                          title="Clique e arraste para reordenar"
+                        >
+                          <GripVertical size={18} />
+                        </div>
+
                         <button
                           onClick={() => handleToggleExercise(ex.id)}
                           className="mt-0.5 sm:mt-0 text-emerald-600 dark:text-emerald-400 transition"

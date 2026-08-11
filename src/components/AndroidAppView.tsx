@@ -151,6 +151,11 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
               Toda alteração feita nesta interface Web ou no seu smartphone Android atualiza automaticamente as tabelas <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-blue-600 dark:text-blue-400">notes</code>, <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-blue-600 dark:text-blue-400">kanban_cards</code> e <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-blue-600 dark:text-blue-400">users</code> no mesmo arquivo <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-blue-600 dark:text-blue-400">database.db</code>.
             </p>
+
+            <div className="p-3.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2.5">
+              <Sparkles className="w-4 h-4 text-emerald-500 shrink-0" />
+              <span><strong>Atualização Instantânea (Live Sync):</strong> Graças à configuração <code className="bg-slate-950 px-1.5 py-0.5 rounded text-emerald-300">server.url</code> no Capacitor, qualquer alteração no WebApp reflete <strong>imediatamente</strong> no aplicativo Android em tempo real, sem precisar reinstalar ou atualizar o APK!</span>
+            </div>
           </div>
 
           {/* QR Code & Direct Connect Card */}

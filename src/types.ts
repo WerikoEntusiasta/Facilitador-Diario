@@ -180,13 +180,32 @@ export interface TaskItem {
   createdAt: string;
 }
 
+export type NotificationSound =
+  | 'classic_beep'
+  | 'tibetan_bowl'
+  | 'digital_harp'
+  | 'crystal_chime'
+  | 'soft_gong'
+  | 'radar_alert'
+  | 'futuristic_ping'
+  | 'bubble_pop'
+  | 'aircraft_beep'
+  | 'astral_melody';
+
+export type NotificationPriority = 'baixa' | 'media' | 'alta' | 'urgente';
+
 export interface NotificationSettings {
   enabled: boolean;
   notifyFasting: boolean;
+  fastingPriority: NotificationPriority;
   notifyWorkout: boolean;
+  workoutPriority: NotificationPriority;
   notifyTasks: boolean;
+  tasksPriority: NotificationPriority;
   notifyCalendar: boolean;
+  calendarPriority: NotificationPriority;
   soundEnabled: boolean;
+  selectedSound: NotificationSound;
   bypassDND: boolean;
   alertVolume: number;
 }
