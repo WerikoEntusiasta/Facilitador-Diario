@@ -77,6 +77,14 @@ const attachmentUpload = multer({
 });
 
 /* =========================================================================
+   HEALTH CHECK
+   ========================================================================= */
+
+router.get('/health', (req, res) => {
+  res.json({ status: 'ok', name: 'KeepBoard API', time: new Date().toISOString() });
+});
+
+/* =========================================================================
    AUTH & USER MANAGEMENT
    ========================================================================= */
 
@@ -90,10 +98,10 @@ function getUserIdFromReq(req: any): number {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return 1; // Default single-tenant user for local docker sessions
+      return 0; // Unauthenticated
     }
     const token = authHeader.split(' ')[1];
-    if (!token) return 1;
+    if (!token) return 0;
 
     const decoded = Buffer.from(token, 'base64').toString('utf-8');
     const parts = decoded.split('.');
@@ -109,9 +117,9 @@ function getUserIdFromReq(req: any): number {
         if (!isNaN(uid) && uid > 0) return uid;
       }
     }
-    return 1;
+    return 0;
   } catch (e) {
-    return 1;
+    return 0;
   }
 }
 
@@ -151,6 +159,16 @@ router.post('/auth/register', (req, res) => {
       [userId, userId, userId, userId]
     );
 
+    // Create initial board for new user
+    const boardRes = runQuery(
+      'INSERT INTO kanban_boards (user_id, title, description, color) VALUES (?, ?, ?, ?)',
+      [userId, 'Meu Primeiro Quadro', 'Quadro de tarefas padrão', '#3b82f6']
+    );
+    const boardId = boardRes.lastInsertRowid;
+    runQuery('INSERT INTO kanban_columns (board_id, title, position) VALUES (?, ?, 0)', [boardId, 'A Fazer']);
+    runQuery('INSERT INTO kanban_columns (board_id, title, position) VALUES (?, ?, 1)', [boardId, 'Em Progresso']);
+    runQuery('INSERT INTO kanban_columns (board_id, title, position) VALUES (?, ?, 2)', [boardId, 'Concluído']);
+
     res.json({ user, token });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -184,9 +202,12 @@ router.post('/auth/login', (req, res) => {
 router.get('/auth/me', (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Sessão expirada ou não autenticada' });
+    }
     const user = queryOne('SELECT id, name, email, avatar, created_at FROM users WHERE id = ?', [userId]);
     if (!user) {
-      return res.status(404).json({ error: 'Usuário não encontrado' });
+      return res.status(401).json({ error: 'Usuário não encontrado' });
     }
     res.json(user);
   } catch (err: any) {

@@ -196,49 +196,11 @@ function createSchema(db: Database) {
   safeAddColumn(db, 'vault_items', "doc_data TEXT DEFAULT '{}'");
   safeAddColumn(db, 'vault_items', "attachments TEXT DEFAULT '[]'");
 
-  // Seed default user if empty
-  const userCheck = db.exec('SELECT COUNT(*) as count FROM users');
-  if (userCheck.length === 0 || (userCheck[0].values[0][0] as number) === 0) {
-    const defaultPasswordHash = crypto.pbkdf2Sync('123456', 'keepflow-salt-2026', 10000, 64, 'sha512').toString('hex');
-    db.run(
-      `INSERT INTO users (id, name, email, password_hash, avatar) VALUES (1, 'Usuário Demo', 'demo@keepboard.app', ?, 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150')`,
-      [defaultPasswordHash]
-    );
-  }
-
-  // Seed default data if empty
-  const labelCheck = db.exec('SELECT COUNT(*) as count FROM labels');
-  if (labelCheck.length === 0 || (labelCheck[0].values[0][0] as number) === 0) {
-    db.run(`INSERT INTO labels (user_id, name, color) VALUES (1, 'Trabalho', '#3b82f6'), (1, 'Pessoal', '#10b981'), (1, 'Urgente', '#ef4444'), (1, 'Estudos', '#8b5cf6')`);
-  }
-
-  const boardCheck = db.exec('SELECT COUNT(*) as count FROM kanban_boards');
-  if (boardCheck.length === 0 || (boardCheck[0].values[0][0] as number) === 0) {
-    db.run(`INSERT INTO kanban_boards (user_id, title, description, color) VALUES (1, 'Meu Primeiro Quadro', 'Quadro de tarefas padrão', '#3b82f6')`);
-    
-    // Add columns for board 1
-    db.run(`INSERT INTO kanban_columns (board_id, title, position) VALUES 
-      (1, 'A Fazer', 0),
-      (1, 'Em Progresso', 1),
-      (1, 'Revisão', 2),
-      (1, 'Concluído', 3)
-    `);
-
-    // Add sample cards
-    db.run(`INSERT INTO kanban_cards (column_id, board_id, title, description, priority, due_date, position) VALUES
-      (1, 1, 'Configurar ambiente de trabalho', 'Instalar dependências e validar configurações do projeto.', 'Alta', '${new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0]}', 0),
-      (2, 1, 'Desenvolver protótipo Keep & Kanban', 'Criar os componentes interativos do frontend com Tailwind CSS.', 'Urgente', '${new Date().toISOString().split('T')[0]}', 0),
-      (4, 1, 'Planejamento inicial', 'Definição da arquitetura e esquema do banco SQLite.', 'Média', '${new Date(Date.now() - 86400000).toISOString().split('T')[0]}', 0)
-    `);
-  }
-
-  const noteCheck = db.exec('SELECT COUNT(*) as count FROM notes');
-  if (noteCheck.length === 0 || (noteCheck[0].values[0][0] as number) === 0) {
-    const today = new Date().toISOString().split('T')[0];
-    db.run(`INSERT INTO notes (user_id, title, content, checklist, color, is_pinned, reminder_date) VALUES 
-      (1, 'Bem-vindo ao KeepBoard!', 'Sua aplicação completa de notas, quadros Kanban e documentos em PDF com SQLite local.', '[]', '#eff6ff', 1, '${today}T14:00'),
-      (1, 'Lista de Compras da Semana', '', '[{"id":"1","text":"Pão integral","completed":true},{"id":"2","text":"Café especial","completed":false},{"id":"3","text":"Frutas frescas","completed":false}]', '#fef3c7', 0, NULL)
-    `);
+  // Clean up any old demo user if exists
+  try {
+    db.run("DELETE FROM users WHERE email = 'demo@keepboard.app'");
+  } catch (e) {
+    // Ignore if table/user not present
   }
 
   const workoutCheck = db.exec('SELECT COUNT(*) as count FROM workouts');

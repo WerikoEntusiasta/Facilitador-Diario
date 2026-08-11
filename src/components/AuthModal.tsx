@@ -66,33 +66,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleDemoLogin = async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await apiLogin('demo@keepboard.app', '123456');
-      localStorage.setItem('kb_auth_token', res.token);
-      localStorage.setItem('kb_auth_user', JSON.stringify(res.user));
-      onAuthSuccess(res.user, res.token);
-      onClose();
-    } catch (err: any) {
-      setError('Falha ao acessar conta demo. Tente novamente.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
       <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
         {/* Header */}
         <div className="relative bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white flex flex-col items-center justify-center text-center">
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 p-1.5 text-white/80 hover:text-white rounded-full hover:bg-white/10 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {currentUser && (
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 p-1.5 text-white/80 hover:text-white rounded-full hover:bg-white/10 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
 
           <div className="w-16 h-16 rounded-full bg-white/10 p-1 backdrop-blur-md mb-3 flex items-center justify-center border border-white/20 shadow-inner">
             {currentUser?.avatar ? (
@@ -258,20 +244,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               'Salvar Alterações'
             )}
           </button>
-
-          {/* Demo Button for instant access */}
-          {!currentUser && (
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={handleDemoLogin}
-                className="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                Acessar com Conta Demo Instantânea
-              </button>
-            </div>
-          )}
 
           {/* Logout button if profile */}
           {currentUser && (

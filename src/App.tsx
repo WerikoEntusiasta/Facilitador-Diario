@@ -53,12 +53,16 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('kb_auth_user');
-      return saved ? JSON.parse(saved) : null;
+      const token = localStorage.getItem('kb_auth_token');
+      return saved && token ? JSON.parse(saved) : null;
     } catch (e) {
       return null;
     }
   });
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(() => {
+    const token = localStorage.getItem('kb_auth_token');
+    return !token;
+  });
 
   // Data states
   const [labels, setLabels] = useState<Label[]>([]);
@@ -97,16 +101,34 @@ export default function App() {
   }, [currentUser?.id]);
 
   const checkCurrentUser = async () => {
+    const token = localStorage.getItem('kb_auth_token');
+    if (!token) {
+      setCurrentUser(null);
+      setIsAuthModalOpen(true);
+      return;
+    }
     try {
       const user = await apiGetMe();
       setCurrentUser(user);
       localStorage.setItem('kb_auth_user', JSON.stringify(user));
     } catch (e) {
-      // User not authenticated or using default
+      setCurrentUser(null);
+      localStorage.removeItem('kb_auth_token');
+      localStorage.removeItem('kb_auth_user');
+      setIsAuthModalOpen(true);
     }
   };
 
   const loadInitialData = async () => {
+    const token = localStorage.getItem('kb_auth_token');
+    if (!token) {
+      setLabels([]);
+      setNotes([]);
+      setBoards([]);
+      setActiveBoard(null);
+      return;
+    }
+
     try {
       const [lbls, nts, bds, trashed, docs] = await Promise.all([
         apiGetLabels(),
@@ -141,7 +163,11 @@ export default function App() {
     localStorage.removeItem('kb_auth_token');
     localStorage.removeItem('kb_auth_user');
     setCurrentUser(null);
-    loadInitialData();
+    setLabels([]);
+    setNotes([]);
+    setBoards([]);
+    setActiveBoard(null);
+    setIsAuthModalOpen(true);
   };
 
   const refreshNotes = async () => {
@@ -362,11 +388,14 @@ export default function App() {
 
       {/* MODALS */}
       <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => setIsAuthModalOpen(false)}
+        isOpen={isAuthModalOpen || !currentUser}
+        onClose={() => {
+          if (currentUser) setIsAuthModalOpen(false);
+        }}
         currentUser={currentUser}
         onAuthSuccess={(user) => {
           setCurrentUser(user);
+          setIsAuthModalOpen(false);
           loadInitialData();
         }}
         onUpdateSuccess={(user) => {
