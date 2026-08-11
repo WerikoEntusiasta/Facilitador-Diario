@@ -114,7 +114,11 @@ function getUserIdFromReq(req: any): number {
       const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(payload).digest('hex').substring(0, 16);
 
       if (sig.length === expectedSig.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
-        if (!isNaN(uid) && uid > 0) return uid;
+        const tsNum = parseInt(timestamp, 10);
+        const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+        if (!isNaN(uid) && uid > 0 && !isNaN(tsNum) && (Date.now() - tsNum < THIRTY_DAYS)) {
+          return uid;
+        }
       }
     }
     return 0;

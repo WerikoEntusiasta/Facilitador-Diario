@@ -47,7 +47,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     try {
       const serverUrl = getServerUrl();
       const serverKey = getServerKey();
-      const token = localStorage.getItem('kb_token');
+      const token = localStorage.getItem('kb_auth_token') || localStorage.getItem('kb_token');
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -96,7 +96,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     try {
       const serverUrl = getServerUrl();
       const serverKey = getServerKey();
-      const token = localStorage.getItem('kb_token');
+      const token = localStorage.getItem('kb_auth_token') || localStorage.getItem('kb_token');
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -132,7 +132,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     try {
       const serverUrl = getServerUrl();
       const serverKey = getServerKey();
-      const token = localStorage.getItem('kb_token');
+      const token = localStorage.getItem('kb_auth_token') || localStorage.getItem('kb_token');
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
@@ -162,7 +162,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     try {
       const serverUrl = getServerUrl();
       const serverKey = getServerKey();
-      const token = localStorage.getItem('kb_token');
+      const token = localStorage.getItem('kb_auth_token') || localStorage.getItem('kb_token');
 
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',

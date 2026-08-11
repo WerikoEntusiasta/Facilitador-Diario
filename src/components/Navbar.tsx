@@ -9,6 +9,7 @@ import {
   User as UserIcon,
   Server,
   RefreshCw,
+  Bell,
 } from 'lucide-react';
 import { ViewTab, User } from '../types';
 
@@ -27,6 +28,7 @@ interface NavbarProps {
   currentUser: User | null;
   onOpenAuth: () => void;
   onOpenServerSettings?: () => void;
+  onOpenNotificationModal?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -42,6 +44,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onOpenAuth,
   onOpenServerSettings,
+  onOpenNotificationModal,
 }) => {
   const handleUpdateApp = () => {
     if ('serviceWorker' in navigator) {
@@ -158,6 +161,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Tag size={18} className="text-indigo-500" />
             <span className="hidden lg:inline">Etiquetas</span>
           </button>
+
+          {onOpenNotificationModal && (
+            <button
+              onClick={onOpenNotificationModal}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"
+              title="Menu de Notificações & DND"
+            >
+              <Bell size={18} className="text-amber-500" />
+              <span className="hidden lg:inline">Notificações</span>
+            </button>
+          )}
 
           <button
             onClick={onToggleDarkMode}

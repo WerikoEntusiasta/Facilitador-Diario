@@ -473,6 +473,7 @@ export default function App() {
         currentUser={currentUser}
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onOpenServerSettings={() => setIsServerModalOpen(true)}
+        onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
       />
 
       <div className="flex-1 flex overflow-hidden">
