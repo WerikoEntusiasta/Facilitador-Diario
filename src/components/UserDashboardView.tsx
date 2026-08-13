@@ -52,6 +52,7 @@ interface WeatherDaily {
 
 interface WeatherSummary {
   temperature?: number;
+  temperature_2m?: number;
   weather_code?: number;
   relative_humidity_2m?: number;
   wind_speed_10m?: number;
@@ -168,9 +169,11 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
       fetch('https://api.open-meteo.com/v1/forecast?latitude=-21.138&longitude=-48.977&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=America/Sao_Paulo')
         .then(res => res.json())
         .then(data => {
-          if (data) {
+          if (data && data.current) {
+            const temp = data.current.temperature_2m ?? data.current.temperature;
             setWeather({
-              temperature: data.current?.temperature_2m,
+              temperature: temp,
+              temperature_2m: temp,
               weather_code: data.current?.weather_code,
               relative_humidity_2m: data.current?.relative_humidity_2m,
               wind_speed_10m: data.current?.wind_speed_10m,
@@ -284,7 +287,11 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
           <div>
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Clima Catanduva</div>
             <div className="text-xl font-black text-sky-600 dark:text-sky-400 mt-0.5">
-              {weather ? `${Math.round(weather.temperature_2m ?? 0)}°C` : '26°C'}
+              {weatherLoading ? (
+                <span className="text-xs font-normal text-slate-400">Carregando...</span>
+              ) : (
+                `${Math.round(weather?.temperature_2m ?? weather?.temperature ?? 26)}°C`
+              )}
             </div>
           </div>
           <div className="p-3 rounded-xl bg-sky-500/10 text-sky-600">
