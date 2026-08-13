@@ -24,6 +24,8 @@ import { exportNoteToPdf } from '../lib/pdfExport';
 import { PRESET_COLORS, getNoteCardStyle } from '../lib/colors';
 import { apiUploadNoteAttachment } from '../lib/api';
 
+import { compressImageFile } from '../lib/imageCompressor';
+
 interface NoteEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -86,7 +88,12 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
     setIsUploading(true);
     try {
       for (let i = 0; i < files.length; i++) {
-        const uploaded = await apiUploadNoteAttachment(files[i]);
+        let fileToUpload = files[i];
+        if (fileToUpload.type.startsWith('image/')) {
+          const compressed = await compressImageFile(fileToUpload, 1200, 1200, 0.85);
+          fileToUpload = compressed.file;
+        }
+        const uploaded = await apiUploadNoteAttachment(fileToUpload);
         setAttachments((prev) => [...prev, uploaded]);
       }
     } catch (err: any) {

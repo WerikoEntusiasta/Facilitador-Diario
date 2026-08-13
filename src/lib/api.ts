@@ -34,13 +34,16 @@ export function isCurrentOriginLocalhost(): boolean {
   return isLocalhostUrl(window.location.href) || isLocalhostUrl(window.location.hostname);
 }
 
+export const DEFAULT_SERVER_URL = 'https://keepflow.werikspace.xyz';
+export const DEFAULT_PRODUCTION_API = 'https://keepflow.werikspace.xyz/api';
+
 export function getServerUrl(): string {
   const saved = (localStorage.getItem('kb_server_url') || '').trim().replace(/\/+$/, '');
   if (saved && isLocalhostUrl(saved)) {
     localStorage.removeItem('kb_server_url');
-    return '';
+    return DEFAULT_SERVER_URL;
   }
-  return saved;
+  return saved || DEFAULT_SERVER_URL;
 }
 
 export function setServerUrl(url: string): void {
@@ -74,8 +77,6 @@ export function isNativeApp(): boolean {
   return protocol === 'capacitor:' || protocol === 'file:' || (window as any).Capacitor !== undefined;
 }
 
-export const DEFAULT_PRODUCTION_API = 'https://ais-dev-l4g4u7bqaz6ibo5byvyh7i-215070016480.us-east5.run.app/api';
-
 export function getApiBaseUrl(): string {
   const customUrl = getServerUrl();
   if (customUrl) {
@@ -84,10 +85,7 @@ export function getApiBaseUrl(): string {
     }
     return `${customUrl}/api`;
   }
-  if (isNativeApp()) {
-    return DEFAULT_PRODUCTION_API;
-  }
-  return '/api';
+  return DEFAULT_PRODUCTION_API;
 }
 
 export function resolveUploadUrl(pathUrl: string): string {

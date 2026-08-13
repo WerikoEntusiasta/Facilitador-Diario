@@ -11,6 +11,9 @@ import {
   WifiOff,
   RefreshCw,
   CloudCheck,
+  Zap,
+  Sparkles,
+  Database,
 } from 'lucide-react';
 import { ViewTab, User } from '../types';
 import { subscribeSyncState, SyncState } from '../lib/offlineSync';
@@ -31,6 +34,10 @@ interface NavbarProps {
   onOpenAuth: () => void;
   onOpenServerSettings?: () => void;
   onOpenNotificationModal?: () => void;
+  onOpenGlobalSearch?: () => void;
+  onOpenPomodoro?: () => void;
+  onOpenTemplates?: () => void;
+  onOpenBackup?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -47,6 +54,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenAuth,
   onOpenServerSettings,
   onOpenNotificationModal,
+  onOpenGlobalSearch,
+  onOpenPomodoro,
+  onOpenTemplates,
+  onOpenBackup,
 }) => {
   const [syncState, setSyncState] = useState<SyncState>({
     isOnline: true,
@@ -133,9 +144,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             <input
               type="text"
               value={searchQuery}
+              onFocus={() => {
+                if (onOpenGlobalSearch) onOpenGlobalSearch();
+              }}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Buscar notas, tarefas, cartões ou arquivos..."
-              className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 rounded-xl text-sm border border-transparent focus:border-indigo-500 dark:focus:border-indigo-400 focus:bg-white dark:focus:bg-slate-800 outline-none transition placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              placeholder="Buscar (Ctrl + K) em notas, tarefas, cartões ou arquivos..."
+              className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 rounded-xl text-sm border border-transparent focus:border-indigo-500 dark:focus:border-indigo-400 focus:bg-white dark:focus:bg-slate-800 outline-none transition placeholder:text-slate-400 dark:placeholder:text-slate-500 cursor-pointer"
             />
             {searchQuery && (
               <button
@@ -168,6 +182,40 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           ) : null}
 
+
+          {/* Quick Action Tools */}
+          {onOpenPomodoro && (
+            <button
+              onClick={onOpenPomodoro}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"
+              title="Modo Foco & Cronômetro Pomodoro"
+            >
+              <Zap size={18} className="text-indigo-500 fill-indigo-500/20" />
+              <span className="hidden xl:inline">Foco</span>
+            </button>
+          )}
+
+          {onOpenTemplates && (
+            <button
+              onClick={onOpenTemplates}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"
+              title="Modelos Prontos (Templates)"
+            >
+              <Sparkles size={18} className="text-amber-500" />
+              <span className="hidden xl:inline">Templates</span>
+            </button>
+          )}
+
+          {onOpenBackup && (
+            <button
+              onClick={onOpenBackup}
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"
+              title="Backup e Restauração de Dados"
+            >
+              <Database size={18} className="text-emerald-500" />
+              <span className="hidden xl:inline">Backup</span>
+            </button>
+          )}
 
           <button
             onClick={onOpenLabelManager}

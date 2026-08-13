@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ViewTab, Note, Label, KanbanBoard, KanbanCard, User, FastingSession } from './types';
+import { ViewTab, Note, Label, KanbanBoard, KanbanCard, User, FastingSession, WorkoutRoutine } from './types';
 import {
   apiGetLabels,
   apiCreateLabel,
@@ -27,6 +27,8 @@ import {
   isNativeApp,
 } from './lib/api';
 import { startSyncMonitor } from './lib/offlineSync';
+import { startNotificationScheduler, requestNotificationPermission } from './lib/webNotifications';
+import { NoteTemplate, BoardTemplate } from './lib/templates';
 import { playFartSound } from './lib/fartSound';
 
 import { Navbar } from './components/Navbar';
@@ -50,6 +52,11 @@ import { TasksView } from './components/TasksView';
 import { WidgetsHubView } from './components/WidgetsHubView';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
 import { UserDashboardView } from './components/UserDashboardView';
+import { GlobalSearchModal } from './components/GlobalSearchModal';
+import { PomodoroFocusModal } from './components/PomodoroFocusModal';
+import { TemplateSelectorModal } from './components/TemplateSelectorModal';
+import { BackupRestoreModal } from './components/BackupRestoreModal';
+import { NoteHistoryModal, NoteRevision } from './components/NoteHistoryModal';
 import {
   getStoredActiveSession,
   setStoredActiveSession,
@@ -106,8 +113,24 @@ export default function App() {
   const [isCardModalOpen, setIsCardModalOpen] = useState(false);
 
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
-  const [isServerModalOpen, setIsServerModalOpen] = useState(() => isNativeApp() && !getServerUrl());
+  const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+
+  // New Modals for Feature Expansion
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [isPomodoroOpen, setIsPomodoroOpen] = useState(false);
+  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
+  const [isBackupOpen, setIsBackupOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [selectedNoteForHistory, setSelectedNoteForHistory] = useState<Note | null>(null);
+  const [noteRevisionsMap, setNoteRevisionsMap] = useState<Record<number, NoteRevision[]>>(() => {
+    try {
+      const raw = localStorage.getItem('kb_note_revisions');
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
 
   // Fasting state
   const [activeFastingSession, setActiveFastingSession] = useState<FastingSession | null>(getStoredActiveSession);
@@ -253,6 +276,69 @@ export default function App() {
     }
   }, [darkMode]);
 
+  // Web Notifications Scheduler for Notes and Cards
+  useEffect(() => {
+    requestNotificationPermission();
+    const cleanupNotifs = startNotificationScheduler(
+      () => notes,
+      () => {
+        const allCards: KanbanCard[] = [];
+        boards.forEach((b) => {
+          (b.columns || []).forEach((col) => {
+            if (col.cards) allCards.push(...col.cards);
+          });
+        });
+        return allCards;
+      }
+    );
+    return () => cleanupNotifs();
+  }, [notes, boards]);
+
+  // Save Note Revision Helper
+  const saveNoteRevision = (noteId: number, title: string, content: string) => {
+    const revisions = noteRevisionsMap[noteId] || [];
+    const newRev: NoteRevision = {
+      timestamp: new Date().toISOString(),
+      title,
+      content,
+    };
+    const updatedMap = {
+      ...noteRevisionsMap,
+      [noteId]: [newRev, ...revisions].slice(0, 15), // keep up to 15 revisions
+    };
+    setNoteRevisionsMap(updatedMap);
+    localStorage.setItem('kb_note_revisions', JSON.stringify(updatedMap));
+  };
+
+  // Template Handlers
+  const handleApplyNoteTemplate = async (tpl: NoteTemplate) => {
+    await handleCreateNote({
+      title: tpl.title,
+      content: tpl.content,
+      color: tpl.color,
+      checklist: tpl.checklist || [],
+    });
+  };
+
+  const handleApplyBoardTemplate = async (tpl: BoardTemplate) => {
+    await handleCreateBoard({
+      title: tpl.title,
+      description: tpl.description,
+      color: tpl.color,
+    });
+    loadInitialData();
+  };
+
+  // Backup Import Handler
+  const handleImportBackup = (data: { notes?: Note[]; boards?: KanbanBoard[]; workouts?: WorkoutRoutine[]; labels?: Label[] }) => {
+    if (data.notes && data.notes.length > 0) {
+      data.notes.forEach((n) => handleCreateNote(n));
+    }
+    if (data.labels && data.labels.length > 0) {
+      data.labels.forEach((l) => handleCreateLabel(l.name, l.color));
+    }
+  };
+
   useEffect(() => {
     checkCurrentUser();
     loadInitialData();
@@ -379,6 +465,11 @@ export default function App() {
   };
 
   const handleUpdateNote = async (id: number, updated: Partial<Note> & { labelIds?: number[] }) => {
+    // Save current state into revision history
+    const existing = notes.find((n) => n.id === id);
+    if (existing) {
+      saveNoteRevision(id, existing.title, existing.content);
+    }
     await apiUpdateNote(id, updated);
     refreshNotes();
   };
@@ -480,6 +571,10 @@ export default function App() {
         onOpenAuth={() => setIsAuthModalOpen(true)}
         onOpenServerSettings={() => setIsServerModalOpen(true)}
         onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
+        onOpenGlobalSearch={() => setIsGlobalSearchOpen(true)}
+        onOpenPomodoro={() => setIsPomodoroOpen(true)}
+        onOpenTemplates={() => setIsTemplatesOpen(true)}
+        onOpenBackup={() => setIsBackupOpen(true)}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -694,6 +789,62 @@ export default function App() {
       <NotificationSettingsModal
         isOpen={isNotificationModalOpen}
         onClose={() => setIsNotificationModalOpen(false)}
+      />
+
+      <GlobalSearchModal
+        isOpen={isGlobalSearchOpen}
+        onClose={() => setIsGlobalSearchOpen(false)}
+        notes={notes}
+        cards={activeBoard?.columns ? activeBoard.columns.flatMap(c => c.cards || []) : []}
+        workouts={[]}
+        documents={[]}
+        onSelectNote={(note) => {
+          setEditingNote(note);
+          setIsNoteModalOpen(true);
+        }}
+        onSelectCard={(card) => {
+          setEditingCard(card);
+          setIsCardModalOpen(true);
+        }}
+      />
+
+      <PomodoroFocusModal
+        isOpen={isPomodoroOpen}
+        onClose={() => setIsPomodoroOpen(false)}
+        notes={notes}
+        cards={activeBoard?.columns ? activeBoard.columns.flatMap(c => c.cards || []) : []}
+      />
+
+      <TemplateSelectorModal
+        isOpen={isTemplatesOpen}
+        onClose={() => setIsTemplatesOpen(false)}
+        onApplyNoteTemplate={handleApplyNoteTemplate}
+        onApplyBoardTemplate={handleApplyBoardTemplate}
+      />
+
+      <BackupRestoreModal
+        isOpen={isBackupOpen}
+        onClose={() => setIsBackupOpen(false)}
+        notes={notes}
+        boards={boards}
+        workouts={[]}
+        labels={labels}
+        onImportBackup={handleImportBackup}
+      />
+
+      <NoteHistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        note={selectedNoteForHistory}
+        revisions={selectedNoteForHistory ? (noteRevisionsMap[selectedNoteForHistory.id] || []) : []}
+        onRestoreRevision={async (rev) => {
+          if (selectedNoteForHistory && selectedNoteForHistory.id) {
+            await handleUpdateNote(selectedNoteForHistory.id, {
+              title: rev.title,
+              content: rev.content,
+            });
+          }
+        }}
       />
 
       {showFloatingWidget && activeFastingSession && (

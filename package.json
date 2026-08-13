@@ -22,6 +22,7 @@
     "@hello-pangea/dnd": "^18.0.1",
     "@types/helmet": "^4.0.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "compression": "^1.8.1",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "helmet": "^8.3.0",
@@ -37,6 +38,7 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@types/compression": "^1.8.1",
     "@types/express": "^4.17.21",
     "@types/multer": "^2.2.0",
     "@types/node": "^22.14.0",

@@ -1,4 +1,5 @@
 import express from 'express';
+import compression from 'compression';
 import path from 'path';
 import helmet from 'helmet';
 import { createServer as createViteServer } from 'vite';
@@ -14,6 +15,9 @@ async function startServer() {
 
   // Disable X-Powered-By header to prevent information leakage
   app.disable('x-powered-by');
+
+  // Gzip / Deflate compression for response optimization
+  app.use(compression());
 
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));

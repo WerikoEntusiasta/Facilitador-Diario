@@ -2,6 +2,7 @@
 // Keeps user data cached for up to 3 days when server is unreachable (e.g. container down).
 // Automatically queues changes offline and syncs missing data once reconnected.
 
+import { idbSet, idbGet, idbClearExpired } from './indexedDb';
 import {
   apiCreateNote,
   apiUpdateNote,
@@ -102,6 +103,8 @@ export function saveCache<T>(key: string, data: T): void {
       data,
     };
     localStorage.setItem(`kb_cache_${key}`, JSON.stringify(entry));
+    // Also save to IndexedDB for high-capacity offline storage
+    idbSet(key, data);
   } catch (err) {
     console.warn('Erro ao salvar cache:', err);
   }
@@ -110,19 +113,23 @@ export function saveCache<T>(key: string, data: T): void {
 export function getCache<T>(key: string): T | null {
   try {
     const raw = localStorage.getItem(`kb_cache_${key}`);
-    if (!raw) return null;
-    const entry: CacheEntry<T> = JSON.parse(raw);
-    const age = Date.now() - entry.timestamp;
-    // Valid for 3 days
-    if (age <= THREE_DAYS_MS) {
-      return entry.data;
-    } else {
+    if (raw) {
+      const entry: CacheEntry<T> = JSON.parse(raw);
+      if (Date.now() - entry.timestamp <= THREE_DAYS_MS) {
+        return entry.data;
+      }
       localStorage.removeItem(`kb_cache_${key}`);
-      return null;
     }
-  } catch (err) {
-    return null;
+  } catch {
+    // Fallback below
   }
+  return null;
+}
+
+export async function getCacheAsync<T>(key: string): Promise<T | null> {
+  const syncRes = getCache<T>(key);
+  if (syncRes !== null) return syncRes;
+  return await idbGet<T>(key, THREE_DAYS_MS);
 }
 
 export function clearExpiredCache(): void {
@@ -143,7 +150,8 @@ export function clearExpiredCache(): void {
         }
       }
     }
-  } catch (e) {
+    idbClearExpired(THREE_DAYS_MS);
+  } catch {
     // ignore
   }
 }
@@ -292,16 +300,22 @@ export async function processSyncQueue(onRefreshRequired?: () => void): Promise<
   return success;
 }
 
-// ---------------- AUTOMATIC RECONNECTION MONITOR ----------------
+// ---------------- AUTOMATIC RECONNECTION MONITOR WITH EXPONENTIAL BACKOFF ----------------
 
 export function startSyncMonitor(onRefreshData: () => void): () => void {
   clearExpiredCache();
 
   let checkTimer: any = null;
+  let retryDelay = 4000; // start with 4s
+  const MIN_DELAY = 4000;
+  const MAX_DELAY = 30000; // max 30s backoff
 
   const checkConnectionAndSync = async () => {
     const token = localStorage.getItem('kb_auth_token');
-    if (!token) return;
+    if (!token) {
+      scheduleNextCheck(MIN_DELAY);
+      return;
+    }
 
     try {
       const conn = await testServerConnection();
@@ -309,6 +323,7 @@ export function startSyncMonitor(onRefreshData: () => void): () => void {
         if (!currentState.isOnline) {
           updateState({ isOnline: true });
         }
+        retryDelay = MIN_DELAY; // reset backoff on success
         const queue = getSyncQueue();
         if (queue.length > 0) {
           await processSyncQueue(onRefreshData);
@@ -317,15 +332,26 @@ export function startSyncMonitor(onRefreshData: () => void): () => void {
         if (currentState.isOnline) {
           updateState({ isOnline: false });
         }
+        // Exponential backoff
+        retryDelay = Math.min(retryDelay * 1.5, MAX_DELAY);
       }
     } catch {
       if (currentState.isOnline) {
         updateState({ isOnline: false });
       }
+      retryDelay = Math.min(retryDelay * 1.5, MAX_DELAY);
+    } finally {
+      scheduleNextCheck(retryDelay);
     }
   };
 
+  function scheduleNextCheck(delay: number) {
+    if (checkTimer) clearTimeout(checkTimer);
+    checkTimer = setTimeout(checkConnectionAndSync, delay);
+  }
+
   const handleOnline = () => {
+    retryDelay = MIN_DELAY;
     checkConnectionAndSync();
   };
 
@@ -336,15 +362,12 @@ export function startSyncMonitor(onRefreshData: () => void): () => void {
   window.addEventListener('online', handleOnline);
   window.addEventListener('offline', handleOffline);
 
-  // Check server health every 8 seconds
-  checkTimer = setInterval(checkConnectionAndSync, 8000);
-
   // Initial check
   checkConnectionAndSync();
 
   return () => {
     window.removeEventListener('online', handleOnline);
     window.removeEventListener('offline', handleOffline);
-    if (checkTimer) clearInterval(checkTimer);
+    if (checkTimer) clearTimeout(checkTimer);
   };
 }
