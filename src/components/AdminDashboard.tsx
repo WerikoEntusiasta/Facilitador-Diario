@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { User } from '../types';
 import { getServerUrl, getServerKey } from '../lib/api';
+import { SensitiveActionModal } from './SensitiveActionModal';
 
 interface AdminDashboardProps {
   currentUser: User | null;
@@ -40,6 +41,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{
+    title: string;
+    message: string;
+    keyword: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const fetchAdminData = async () => {
     setLoading(true);
@@ -87,75 +94,81 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
     }
   }, [currentUser]);
 
-  const handleToggleAdmin = async (targetId: number, currentAdminVal?: number) => {
+  const handleToggleAdmin = (targetId: number, currentAdminVal?: number) => {
     const newVal = currentAdminVal === 1 ? 0 : 1;
-    if (!confirm(`Deseja realmente ${newVal === 1 ? 'promover a Administrador' : 'remover privilégios de Admin'} deste usuário?`)) {
-      return;
-    }
+    setPendingAction({
+      title: newVal === 1 ? 'Promover a Administrador' : 'Remover Privilégios de Admin',
+      message: `Tem certeza que deseja ${newVal === 1 ? 'promover este usuário a Administrador' : 'remover os privilégios de Administrador'}?`,
+      keyword: 'confirmar',
+      onConfirm: async () => {
+        try {
+          const serverUrl = getServerUrl();
+          const serverKey = getServerKey();
+          const token = localStorage.getItem('kb_auth_token') || localStorage.getItem('kb_token');
 
-    try {
-      const serverUrl = getServerUrl();
-      const serverKey = getServerKey();
-      const token = localStorage.getItem('kb_auth_token') || localStorage.getItem('kb_token');
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+          };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+          if (serverKey) headers['x-server-key'] = serverKey;
 
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      if (serverKey) headers['x-server-key'] = serverKey;
+          const res = await fetch(`${serverUrl}/api/admin/users/${targetId}/admin`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({ is_admin: newVal }),
+          });
 
-      const res = await fetch(`${serverUrl}/api/admin/users/${targetId}/admin`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({ is_admin: newVal }),
-      });
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Erro ao atualizar privilégios');
+          }
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erro ao atualizar privilégios');
+          const updatedUser = await res.json();
+          setUsers(users.map((u) => (u.id === targetId ? updatedUser : u)));
+          setSuccessMsg('Privilégios atualizados com sucesso!');
+          setTimeout(() => setSuccessMsg(null), 3000);
+        } catch (err: any) {
+          setError(err.message);
+        }
       }
-
-      const updatedUser = await res.json();
-      setUsers(users.map((u) => (u.id === targetId ? updatedUser : u)));
-      setSuccessMsg('Privilégios atualizados com sucesso!');
-      setTimeout(() => setSuccessMsg(null), 3000);
-    } catch (err: any) {
-      setError(err.message);
-    }
+    });
   };
 
-  const handleDeleteUser = async (targetId: number, name: string) => {
-    if (!confirm(`ATENÇÃO: Deseja excluir permanentemente a conta de "${name}" e todos os seus dados? Esta ação é irreversível.`)) {
-      return;
-    }
+  const handleDeleteUser = (targetId: number, name: string) => {
+    setPendingAction({
+      title: 'Excluir Usuário Permanentemente',
+      message: `ATENÇÃO: Deseja excluir permanentemente a conta de "${name}" e todos os seus dados? Esta ação é irreversível.`,
+      keyword: 'deletar',
+      onConfirm: async () => {
+        try {
+          const serverUrl = getServerUrl();
+          const serverKey = getServerKey();
+          const token = localStorage.getItem('kb_auth_token') || localStorage.getItem('kb_token');
 
-    try {
-      const serverUrl = getServerUrl();
-      const serverKey = getServerKey();
-      const token = localStorage.getItem('kb_auth_token') || localStorage.getItem('kb_token');
+          const headers: Record<string, string> = {
+            'Content-Type': 'application/json',
+          };
+          if (token) headers['Authorization'] = `Bearer ${token}`;
+          if (serverKey) headers['x-server-key'] = serverKey;
 
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      if (serverKey) headers['x-server-key'] = serverKey;
+          const res = await fetch(`${serverUrl}/api/admin/users/${targetId}`, {
+            method: 'DELETE',
+            headers,
+          });
 
-      const res = await fetch(`${serverUrl}/api/admin/users/${targetId}`, {
-        method: 'DELETE',
-        headers,
-      });
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || 'Erro ao excluir usuário');
+          }
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Erro ao excluir usuário');
+          setUsers(users.filter((u) => u.id !== targetId));
+          setSuccessMsg('Usuário excluído com sucesso.');
+          setTimeout(() => setSuccessMsg(null), 3000);
+        } catch (err: any) {
+          setError(err.message);
+        }
       }
-
-      setUsers(users.filter((u) => u.id !== targetId));
-      setSuccessMsg('Usuário excluído com sucesso.');
-      setTimeout(() => setSuccessMsg(null), 3000);
-    } catch (err: any) {
-      setError(err.message);
-    }
+    });
   };
 
   const handleTriggerFart = async (targetId: number, name: string) => {
@@ -392,6 +405,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser }) =
           </table>
         </div>
       </div>
+      {pendingAction && (
+        <SensitiveActionModal
+          isOpen={!!pendingAction}
+          title={pendingAction.title}
+          message={pendingAction.message}
+          confirmKeyword={pendingAction.keyword}
+          currentUser={currentUser}
+          onConfirm={pendingAction.onConfirm}
+          onClose={() => setPendingAction(null)}
+        />
+      )}
     </div>
   );
 };

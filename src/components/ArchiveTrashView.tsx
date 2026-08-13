@@ -9,7 +9,7 @@ import {
   FileText,
   Kanban,
 } from 'lucide-react';
-import { Note, KanbanCard, Label } from '../types';
+import { Note, KanbanCard, Label, User } from '../types';
 import {
   apiGetNotes,
   apiToggleArchiveNote,
@@ -18,12 +18,14 @@ import {
   apiEmptyTrash,
 } from '../lib/api';
 import { NoteCard } from './NoteCard';
+import { SensitiveActionModal } from './SensitiveActionModal';
 
 interface ArchiveTrashViewProps {
   mode: 'archive' | 'trash';
   allLabels: Label[];
   onOpenNoteEdit: (note: Note) => void;
   onRefreshCounts: () => void;
+  currentUser?: User | null;
 }
 
 export const ArchiveTrashView: React.FC<ArchiveTrashViewProps> = ({
@@ -31,11 +33,18 @@ export const ArchiveTrashView: React.FC<ArchiveTrashViewProps> = ({
   allLabels,
   onOpenNoteEdit,
   onRefreshCounts,
+  currentUser,
 }) => {
   const [archivedNotes, setArchivedNotes] = useState<Note[]>([]);
   const [trashedNotes, setTrashedNotes] = useState<Note[]>([]);
   const [trashedCards, setTrashedCards] = useState<KanbanCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [pendingAction, setPendingAction] = useState<{
+    title: string;
+    message: string;
+    keyword: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -59,41 +68,60 @@ export const ArchiveTrashView: React.FC<ArchiveTrashViewProps> = ({
     }
   };
 
-  const handleUnarchive = async (id: number) => {
-    try {
-      await apiToggleArchiveNote(id);
-      setArchivedNotes(archivedNotes.filter((n) => n.id !== id));
-      onRefreshCounts();
-    } catch (err) {
-      console.error('Erro ao desarquivar:', err);
-    }
+  const handleUnarchive = (id: number) => {
+    setPendingAction({
+      title: 'Confirmar Reversão (Desarquivar)',
+      message: 'Deseja desarquivar esta nota e retornar para o bloco principal?',
+      keyword: 'reverter',
+      onConfirm: async () => {
+        try {
+          await apiToggleArchiveNote(id);
+          setArchivedNotes(archivedNotes.filter((n) => n.id !== id));
+          onRefreshCounts();
+        } catch (err) {
+          console.error('Erro ao desarquivar:', err);
+        }
+      }
+    });
   };
 
-  const handleRestoreTrash = async (type: 'note' | 'card', id: number) => {
-    try {
-      await apiRestoreTrashItem(type, id);
-      if (type === 'note') {
-        setTrashedNotes(trashedNotes.filter((n) => n.id !== id));
-      } else {
-        setTrashedCards(trashedCards.filter((c) => c.id !== id));
+  const handleRestoreTrash = (type: 'note' | 'card', id: number) => {
+    setPendingAction({
+      title: 'Confirmar Restauração',
+      message: 'Deseja restaurar este item da lixeira?',
+      keyword: 'restaurar',
+      onConfirm: async () => {
+        try {
+          await apiRestoreTrashItem(type, id);
+          if (type === 'note') {
+            setTrashedNotes(trashedNotes.filter((n) => n.id !== id));
+          } else {
+            setTrashedCards(trashedCards.filter((c) => c.id !== id));
+          }
+          onRefreshCounts();
+        } catch (err) {
+          console.error('Erro ao restaurar:', err);
+        }
       }
-      onRefreshCounts();
-    } catch (err) {
-      console.error('Erro ao restaurar:', err);
-    }
+    });
   };
 
-  const handleEmptyTrash = async () => {
-    if (confirm('Tem certeza que deseja esvaziar a lixeira permanentemente? Esta ação não pode ser desfeita.')) {
-      try {
-        await apiEmptyTrash();
-        setTrashedNotes([]);
-        setTrashedCards([]);
-        onRefreshCounts();
-      } catch (err) {
-        console.error('Erro ao esvaziar lixeira:', err);
+  const handleEmptyTrash = () => {
+    setPendingAction({
+      title: 'Esvaziar Lixeira Permanentemente',
+      message: 'Tem certeza que deseja excluir permanentemente todos os itens da lixeira? Esta ação é irreversível.',
+      keyword: 'deletar',
+      onConfirm: async () => {
+        try {
+          await apiEmptyTrash();
+          setTrashedNotes([]);
+          setTrashedCards([]);
+          onRefreshCounts();
+        } catch (err) {
+          console.error('Erro ao esvaziar lixeira:', err);
+        }
       }
-    }
+    });
   };
 
   return (
@@ -260,6 +288,17 @@ export const ArchiveTrashView: React.FC<ArchiveTrashViewProps> = ({
             )}
           </div>
         )
+      )}
+      {pendingAction && (
+        <SensitiveActionModal
+          isOpen={!!pendingAction}
+          title={pendingAction.title}
+          message={pendingAction.message}
+          confirmKeyword={pendingAction.keyword}
+          currentUser={currentUser}
+          onConfirm={pendingAction.onConfirm}
+          onClose={() => setPendingAction(null)}
+        />
       )}
     </div>
   );

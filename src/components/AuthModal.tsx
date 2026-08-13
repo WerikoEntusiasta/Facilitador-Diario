@@ -178,14 +178,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
           <h2 className="text-xl font-bold tracking-tight">
             {currentUser && mode === 'profile'
-              ? 'Meu Perfil Sync'
+              ? (currentUser.is_admin === 1 ? 'Meu Perfil Sync' : 'Meu Perfil')
               : mode === 'login'
               ? 'Entrar no KeepFlow'
               : 'Criar Nova Conta'}
           </h2>
           <p className="text-xs text-blue-100 mt-1 max-w-xs">
             {currentUser && mode === 'profile'
-              ? `Sincronizado via SQLite com Android e Web`
+              ? (currentUser.is_admin === 1 ? 'Sincronizado via SQLite com Android e Web' : 'Sincronizado com Android e Web')
               : 'Acesse suas notas e quadros em qualquer dispositivo'}
           </p>
 

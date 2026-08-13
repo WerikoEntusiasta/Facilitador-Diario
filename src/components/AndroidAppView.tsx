@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Download, QrCode, Database, CheckCircle2, ShieldCheck, Wifi, ExternalLink, Sparkles, User, Box, Play, Laptop, ChevronRight, Server, Flame, Layers } from 'lucide-react';
+import { Smartphone, Download, QrCode, Database, CheckCircle2, ShieldCheck, Wifi, ExternalLink, Sparkles, User, Box, Play, Laptop, ChevronRight, Server, Flame, Layers, Bell } from 'lucide-react';
 import { User as UserType } from '../types';
 import { AndroidWidgetCodeModal } from './AndroidWidgetCodeModal';
 
@@ -7,10 +7,12 @@ interface AndroidAppViewProps {
   currentUser: UserType | null;
   onOpenAuth: () => void;
   onOpenServerSettings?: () => void;
+  onOpenNotificationModal?: () => void;
 }
 
-export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onOpenAuth, onOpenServerSettings }) => {
-  const [simulatorView, setSimulatorView] = useState<'notes' | 'kanban' | 'sync'>('notes');
+export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onOpenAuth, onOpenServerSettings, onOpenNotificationModal }) => {
+  const isAdmin = currentUser?.is_admin === 1;
+  const [simulatorView, setSimulatorView] = useState<'notes' | 'kanban' | 'widget' | 'sync'>('widget');
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [installSuccess, setInstallSuccess] = useState(false);
@@ -61,14 +63,16 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
         <div className="relative z-10 max-w-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold text-emerald-100 mb-3 border border-white/20">
             <Smartphone className="w-3.5 h-3.5" />
-            App Android & Sync SQLite Multi-plataforma
+            {isAdmin ? 'App Android & Sync SQLite Multi-plataforma' : 'App Android & Sincronização Multi-plataforma'}
           </div>
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight flex items-center gap-2">
             <img src="/logo.svg" alt="KeepFlow" className="w-9 h-9 rounded-xl inline-block" referrerPolicy="no-referrer" />
             KeepFlow no Seu Smartphone Android
           </h1>
           <p className="mt-2 text-sm text-emerald-50 leading-relaxed">
-            Acesse suas notas do Google Keep, quadros Kanban, lembretes e arquivos PDF sincronizados em tempo real através do mesmo banco de dados **SQLite local**.
+            {isAdmin
+              ? 'Acesse suas notas do Google Keep, quadros Kanban, lembretes e arquivos PDF sincronizados em tempo real através do mesmo banco de dados **SQLite local**.'
+              : 'Acesse suas notas do Google Keep, quadros Kanban, lembretes e arquivos PDF sincronizados em tempo real em todos os seus dispositivos.'}
           </p>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -111,6 +115,16 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
               <Layers className="w-4 h-4" />
               Ver Widgets Nativos (AppWidgets)
             </button>
+
+            {onOpenNotificationModal && (
+              <button
+                onClick={onOpenNotificationModal}
+                className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl text-xs shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <Bell className="w-4 h-4" />
+                Configurar Notificações & DND
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -128,13 +142,13 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
             <h2 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
               <Database className="w-5 h-5 text-blue-600" />
-              Status de Sincronização do Banco de Dados
+              {isAdmin ? 'Status de Sincronização do Banco de Dados' : 'Status de Sincronização'}
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
                 <div className="text-xs text-slate-500 dark:text-slate-400">Motor de Busca</div>
-                <div className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5">SQLite database.db</div>
+                <div className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5">{isAdmin ? 'SQLite database.db' : 'Armazenamento Seguro'}</div>
               </div>
               <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
                 <div className="text-xs text-slate-500 dark:text-slate-400">Latência do Backend</div>
@@ -149,7 +163,9 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
             </div>
 
             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Toda alteração feita nesta interface Web ou no seu smartphone Android atualiza automaticamente as tabelas <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-blue-600 dark:text-blue-400">notes</code>, <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-blue-600 dark:text-blue-400">kanban_cards</code> e <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-blue-600 dark:text-blue-400">users</code> no mesmo arquivo <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-blue-600 dark:text-blue-400">database.db</code>.
+              {isAdmin
+                ? 'Toda alteração feita nesta interface Web ou no seu smartphone Android atualiza automaticamente as tabelas notes, kanban_cards e users no mesmo arquivo database.db.'
+                : 'Toda alteração feita nesta interface Web ou no seu smartphone Android sincroniza instantaneamente em tempo real.'}
             </p>
 
             <div className="p-3.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2.5">
@@ -308,6 +324,100 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
             </div>
           </div>
 
+          {/* Advanced Android App Widgets Guide (RemoteViews & Collections) */}
+          <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl space-y-5 text-white">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                <Layers className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  Widgets Avançados para Android (RemoteViews & Collections)
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Implementação oficial baseada no guia avançado do Android SDK (<code className="text-purple-300">RemoteViewsService</code>, <code className="text-purple-300">RemoteViewsFactory</code> e <code className="text-purple-300">AppWidgetConfigureActivity</code>).
+                </p>
+              </div>
+            </div>
+
+            {/* Widget Architecture Breakdown */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="p-4 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-2">
+                <div className="text-xs font-bold text-purple-400 flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center text-[10px]">1</span>
+                  AppWidgetProviderInfo XML
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Configura o tamanho mínimo (<code className="text-purple-300">minWidth/minHeight</code>), período de atualização (<code className="text-purple-300">updatePeriodMillis</code>), categorias suportadas (<code className="text-purple-300">home_screen</code>) e atividade de configuração opcional.
+                </p>
+              </div>
+
+              <div className="p-4 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-2">
+                <div className="text-xs font-bold text-purple-400 flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center text-[10px]">2</span>
+                  RemoteViews & Collections
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Para listas e grids (ex: suas notas do KeepBoard e tarefas Kanban), utiliza <code className="text-purple-300">RemoteViewsService</code> em conjunto com <code className="text-purple-300">RemoteViewsFactory</code> para preencher itens dinamicamente via <code className="text-purple-300">setRemoteAdapter</code>.
+                </p>
+              </div>
+
+              <div className="p-4 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-2">
+                <div className="text-xs font-bold text-purple-400 flex items-center gap-1.5">
+                  <span className="w-5 h-5 rounded-full bg-purple-500/20 flex items-center justify-center text-[10px]">3</span>
+                  Interatividade & Intents
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  Usa <code className="text-purple-300">setPendingIntentTemplate</code> combinado com <code className="text-purple-300">setOnClickFillInIntent</code> nos itens da lista para permitir toques que abrem notas específicas diretamente no aplicativo.
+                </p>
+              </div>
+            </div>
+
+            {/* Kotlin Code Snippet Viewer */}
+            <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-mono text-purple-300 font-bold flex items-center gap-1.5">
+                  <Laptop className="w-3.5 h-3.5" /> KeepBoardNotesWidgetService.kt (RemoteViewsFactory)
+                </span>
+                <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full font-semibold">Kotlin Android SDK</span>
+              </div>
+              <pre className="text-[11px] font-mono text-slate-300 overflow-x-auto p-3 bg-slate-900 rounded-lg border border-slate-800 leading-relaxed">
+{`class KeepBoardNotesWidgetService : RemoteViewsService() {
+    override fun onGetViewFactory(intent: Intent): RemoteViewsFactory {
+        return NotesRemoteViewsFactory(applicationContext, intent)
+    }
+}
+
+class NotesRemoteViewsFactory(private val context: Context, intent: Intent) : RemoteViewsService.RemoteViewsFactory {
+    private var noteItems = listOf<String>("Lista de Compras", "Reunião de Sincronização", "Ideias de Projeto")
+
+    override fun onCreate() {
+        // Conectar ao SQLite local ou carregar cache
+    }
+
+    override fun getViewAt(position: Int): RemoteViews {
+        val views = RemoteViews(context.packageName, R.layout.widget_note_item)
+        views.setTextViewText(R.id.widgetNoteTitle, noteItems[position])
+        
+        val fillInIntent = Intent().apply {
+            putExtra("NOTE_POSITION", position)
+        }
+        views.setOnClickFillInIntent(R.id.widgetNoteItemContainer, fillInIntent)
+        return views
+    }
+    
+    override fun getCount(): Int = noteItems.size
+    override fun getLoadingView(): RemoteViews? = null
+    override fun getViewTypeCount(): Int = 1
+    override fun getItemId(position: Int): Long = position.toLong()
+    override fun hasStableIds(): Boolean = true
+    override fun onDataSetChanged() {}
+    override fun onDestroy() {}
+}`}
+              </pre>
+            </div>
+          </div>
+
           {/* Docker & Docker Compose Card */}
           <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 shadow-xl space-y-4 text-white">
             <div className="flex items-center gap-3">
@@ -383,7 +493,7 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
               </div>
               <div>
                 <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                  Exportar Cópia do SQLite database.db
+                  {isAdmin ? 'Exportar Cópia do SQLite database.db' : 'Exportar Cópia de Segurança'}
                 </div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400">
                   Faça download direto do arquivo de dados para backup offline
@@ -443,12 +553,20 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
                   <span className="text-xs font-bold">KeepBoard Mobile</span>
                 </div>
                 <div className="flex items-center gap-1 text-[10px] bg-blue-700 px-2 py-0.5 rounded-full">
-                  <Database className="w-3 h-3 text-emerald-300" /> SQLite Sync
+                  <Database className="w-3 h-3 text-emerald-300" /> {isAdmin ? 'SQLite Sync' : 'Sincronizado'}
                 </div>
               </div>
 
               {/* Navigation Tabs inside Simulator */}
-              <div className="flex border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-[11px] font-medium">
+              <div className="flex border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 text-[10px] font-medium">
+                <button
+                  onClick={() => setSimulatorView('widget')}
+                  className={`flex-1 py-2 text-center ${
+                    simulatorView === 'widget' ? 'border-b-2 border-blue-600 text-blue-600 font-bold' : 'text-slate-500'
+                  }`}
+                >
+                  Home Widget
+                </button>
                 <button
                   onClick={() => setSimulatorView('notes')}
                   className={`flex-1 py-2 text-center ${
@@ -477,6 +595,42 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
 
               {/* Simulator Main Content */}
               <div className="flex-1 p-3 overflow-y-auto space-y-2 text-xs">
+                {simulatorView === 'widget' && (
+                  <div className="space-y-3 py-1">
+                    <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider text-center">Início Android (AppWidget Nativo)</div>
+                    
+                    {/* Real Android AppWidget Box (RemoteViews Layout Preview) */}
+                    <div className="bg-slate-900 text-white rounded-2xl p-3.5 border border-purple-500/30 shadow-lg space-y-2.5 relative overflow-hidden">
+                      <div className="absolute -right-4 -top-4 w-16 h-16 bg-purple-500/10 rounded-full blur-xl" />
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-5 h-5 rounded-md bg-purple-600 flex items-center justify-center text-[10px] font-bold">KB</div>
+                          <span className="text-xs font-bold text-purple-300">KeepBoard AppWidget</span>
+                        </div>
+                        <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.5 rounded-full font-mono">4x2</span>
+                      </div>
+
+                      {/* RemoteViews Collection items */}
+                      <div className="space-y-1.5 pt-1">
+                        <div className="p-2 bg-slate-800/80 rounded-xl border border-slate-700/60 flex items-center justify-between">
+                          <span className="text-[11px] font-medium text-slate-200">✓ Comprar Café Especial</span>
+                          <span className="text-[9px] text-emerald-400">Ativo</span>
+                        </div>
+                        <div className="p-2 bg-slate-800/80 rounded-xl border border-slate-700/60 flex items-center justify-between">
+                          <span className="text-[11px] font-medium text-slate-200">Reunião de Sincronização</span>
+                          <span className="text-[9px] text-blue-400">10:00</span>
+                        </div>
+                      </div>
+
+                      <div className="text-[9px] text-slate-400 text-right">Toque para abrir no App</div>
+                    </div>
+
+                    <div className="p-2.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900/50 rounded-xl text-slate-700 dark:text-slate-300 text-[11px]">
+                      💡 Este é um <strong>AppWidget nativo real</strong> configurado via <code className="text-purple-600">AppWidgetProvider</code> e <code className="text-purple-600">RemoteViewsFactory</code> na tela inicial do seu Android.
+                    </div>
+                  </div>
+                )}
+
                 {simulatorView === 'notes' && (
                   <div className="space-y-2">
                     <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 rounded-xl text-slate-800 dark:text-slate-200">
@@ -490,7 +644,7 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
 
                     <div className="p-2.5 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900/50 rounded-xl text-slate-800 dark:text-slate-200">
                       <div className="font-bold text-xs">Reunião de Sincronização</div>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">Validação do esquema SQLite com suporte Android.</p>
+                      <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1">{isAdmin ? 'Validação do esquema SQLite com suporte Android.' : 'Validação de dados com suporte Android.'}</p>
                     </div>
                   </div>
                 )}
@@ -519,7 +673,7 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
                       {currentUser ? currentUser.email : 'demo@keepboard.app'}
                     </div>
                     <div className="p-2 bg-emerald-50 dark:bg-emerald-950/50 rounded-lg text-[10px] text-emerald-700 dark:text-emerald-300 font-medium">
-                      ✓ SQLite Sync Ativo
+                      {isAdmin ? '✓ SQLite Sync Ativo' : '✓ Sincronização Ativa'}
                     </div>
                   </div>
                 )}

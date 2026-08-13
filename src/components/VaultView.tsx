@@ -35,7 +35,7 @@ import {
   MapPin,
   Building,
 } from 'lucide-react';
-import { VaultItem, NoteAttachment } from '../types';
+import { VaultItem, NoteAttachment, User as UserType } from '../types';
 import {
   apiGetVaultStatus,
   apiSetupVaultMasterPassword,
@@ -61,7 +61,11 @@ const CATEGORIES = [
   { name: 'Geral', icon: Key },
 ];
 
-export const VaultView: React.FC = () => {
+interface VaultViewProps {
+  currentUser?: UserType | null;
+}
+
+export const VaultView: React.FC<VaultViewProps> = ({ currentUser }) => {
   // Vault Auth State
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -552,7 +556,7 @@ export const VaultView: React.FC = () => {
           </form>
 
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400">
-            🔒 Proteção por criptografia SHA-256 e SQLite local.
+            🔒 Proteção por criptografia avançada {currentUser?.is_admin === 1 ? 'e SQLite local' : 'e armazenamento seguro'}.
           </div>
         </div>
       </div>

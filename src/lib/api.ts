@@ -13,6 +13,7 @@ import {
   WorkoutRoutine,
   VaultItem,
 } from '../types';
+import { saveCache, getCache, enqueueSyncAction } from './offlineSync';
 
 // DYNAMIC SERVER CONNECTION CONFIGURATION
 export function isLocalhostUrl(url: string): boolean {
@@ -184,7 +185,17 @@ export const apiRegister = (data: { name: string; email: string; password: strin
     body: JSON.stringify(data),
   });
 
-export const apiGetMe = () => request<User>('/auth/me');
+export const apiGetMe = async (): Promise<User> => {
+  try {
+    const user = await request<User>('/auth/me');
+    saveCache('user_me', user);
+    return user;
+  } catch (err) {
+    const cached = getCache<User>('user_me');
+    if (cached) return cached;
+    throw err;
+  }
+};
 
 export const apiUpdateProfile = (data: { name?: string; avatar?: string; newPassword?: string }) =>
   request<User>('/auth/profile', {
@@ -193,45 +204,146 @@ export const apiUpdateProfile = (data: { name?: string; avatar?: string; newPass
   });
 
 // LABELS API
-export const apiGetLabels = () => request<Label[]>('/labels');
-export const apiCreateLabel = (name: string, color: string) =>
-  request<Label>('/labels', {
-    method: 'POST',
-    body: JSON.stringify({ name, color }),
-  });
-export const apiDeleteLabel = (id: number) =>
-  request<{ success: boolean }>(`/labels/${id}`, { method: 'DELETE' });
-
-// NOTES API
-export const apiGetNotes = (archived = false, trashed = false, labelId?: number) => {
-  let url = `/notes?archived=${archived}&trashed=${trashed}`;
-  if (labelId) url += `&labelId=${labelId}`;
-  return request<Note[]>(url);
+export const apiGetLabels = async (): Promise<Label[]> => {
+  try {
+    const data = await request<Label[]>('/labels');
+    saveCache('labels', data);
+    return data;
+  } catch (err) {
+    const cached = getCache<Label[]>('labels');
+    if (cached) return cached;
+    return [];
+  }
 };
 
-export const apiCreateNote = (note: Partial<Note> & { labelIds?: number[] }) =>
-  request<Note>('/notes', {
-    method: 'POST',
-    body: JSON.stringify(note),
-  });
+export const apiCreateLabel = async (name: string, color: string): Promise<Label> => {
+  try {
+    const created = await request<Label>('/labels', {
+      method: 'POST',
+      body: JSON.stringify({ name, color }),
+    });
+    return created;
+  } catch (err) {
+    enqueueSyncAction('CREATE_LABEL', { name, color });
+    const mockLabel: Label = { id: Date.now(), name, color };
+    return mockLabel;
+  }
+};
 
-export const apiUpdateNote = (id: number, note: Partial<Note> & { labelIds?: number[] }) =>
-  request<Note>(`/notes/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(note),
-  });
+export const apiDeleteLabel = async (id: number): Promise<{ success: boolean }> => {
+  try {
+    return await request<{ success: boolean }>(`/labels/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    enqueueSyncAction('DELETE_LABEL', { id });
+    return { success: true };
+  }
+};
 
-export const apiToggleArchiveNote = (id: number) =>
-  request<{ id: number; is_archived: boolean }>(`/notes/${id}/archive`, { method: 'PATCH' });
+// NOTES API
+export const apiGetNotes = async (archived = false, trashed = false, labelId?: number): Promise<Note[]> => {
+  let url = `/notes?archived=${archived}&trashed=${trashed}`;
+  if (labelId) url += `&labelId=${labelId}`;
+  const cacheKey = `notes_${archived}_${trashed}_${labelId || 'all'}`;
+  try {
+    const notes = await request<Note[]>(url);
+    saveCache(cacheKey, notes);
+    return notes;
+  } catch (err) {
+    const cached = getCache<Note[]>(cacheKey);
+    if (cached) return cached;
+    return [];
+  }
+};
 
-export const apiToggleTrashNote = (id: number) =>
-  request<{ id: number; is_trashed: boolean }>(`/notes/${id}/trash`, { method: 'PATCH' });
+export const apiCreateNote = async (note: Partial<Note> & { labelIds?: number[] }): Promise<Note> => {
+  try {
+    return await request<Note>('/notes', {
+      method: 'POST',
+      body: JSON.stringify(note),
+    });
+  } catch (err) {
+    enqueueSyncAction('CREATE_NOTE', note);
+    const mockNote: Note = {
+      id: Date.now(),
+      title: note.title || '',
+      content: note.content || '',
+      checklist: note.checklist || [],
+      attachments: note.attachments || [],
+      color: note.color || '#ffffff',
+      is_pinned: Boolean(note.is_pinned),
+      is_archived: false,
+      is_trashed: false,
+      reminder_date: note.reminder_date || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      labels: [],
+    };
+    return mockNote;
+  }
+};
 
-export const apiTogglePinNote = (id: number) =>
-  request<{ id: number; is_pinned: boolean }>(`/notes/${id}/pin`, { method: 'PATCH' });
+export const apiUpdateNote = async (id: number, note: Partial<Note> & { labelIds?: number[] }): Promise<Note> => {
+  try {
+    return await request<Note>(`/notes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(note),
+    });
+  } catch (err) {
+    enqueueSyncAction('UPDATE_NOTE', { id, data: note });
+    const mockNote: Note = {
+      id,
+      title: note.title || '',
+      content: note.content || '',
+      checklist: note.checklist || [],
+      attachments: note.attachments || [],
+      color: note.color || '#ffffff',
+      is_pinned: Boolean(note.is_pinned),
+      is_archived: Boolean(note.is_archived),
+      is_trashed: Boolean(note.is_trashed),
+      reminder_date: note.reminder_date || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      labels: [],
+    };
+    return mockNote;
+  }
+};
 
-export const apiDeleteNotePermanently = (id: number) =>
-  request<{ success: boolean; id: number }>(`/notes/${id}`, { method: 'DELETE' });
+export const apiToggleArchiveNote = async (id: number) => {
+  try {
+    return await request<{ id: number; is_archived: boolean }>(`/notes/${id}/archive`, { method: 'PATCH' });
+  } catch (err) {
+    enqueueSyncAction('TOGGLE_ARCHIVE_NOTE', { id });
+    return { id, is_archived: true };
+  }
+};
+
+export const apiToggleTrashNote = async (id: number) => {
+  try {
+    return await request<{ id: number; is_trashed: boolean }>(`/notes/${id}/trash`, { method: 'PATCH' });
+  } catch (err) {
+    enqueueSyncAction('TOGGLE_TRASH_NOTE', { id });
+    return { id, is_trashed: true };
+  }
+};
+
+export const apiTogglePinNote = async (id: number) => {
+  try {
+    return await request<{ id: number; is_pinned: boolean }>(`/notes/${id}/pin`, { method: 'PATCH' });
+  } catch (err) {
+    enqueueSyncAction('TOGGLE_PIN_NOTE', { id });
+    return { id, is_pinned: true };
+  }
+};
+
+export const apiDeleteNotePermanently = async (id: number) => {
+  try {
+    return await request<{ success: boolean; id: number }>(`/notes/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    enqueueSyncAction('DELETE_NOTE_PERMANENT', { id });
+    return { success: true, id };
+  }
+};
 
 export const apiUploadNoteAttachment = async (file: File): Promise<NoteAttachment> => {
   const formData = new FormData();
@@ -251,58 +363,211 @@ export const apiUploadNoteAttachment = async (file: File): Promise<NoteAttachmen
 };
 
 // KANBAN API
-export const apiGetBoards = () => request<KanbanBoard[]>('/boards');
-export const apiGetBoardDetails = (id: number) => request<KanbanBoard>(`/boards/${id}`);
-export const apiCreateBoard = (board: { title: string; description?: string; color?: string }) =>
-  request<KanbanBoard>('/boards', {
-    method: 'POST',
-    body: JSON.stringify(board),
-  });
-export const apiUpdateBoard = (id: number, board: { title: string; description?: string; color?: string }) =>
-  request<KanbanBoard>(`/boards/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(board),
-  });
-export const apiDeleteBoard = (id: number) =>
-  request<{ success: boolean; id: number }>(`/boards/${id}`, { method: 'DELETE' });
+export const apiGetBoards = async (): Promise<KanbanBoard[]> => {
+  try {
+    const boards = await request<KanbanBoard[]>('/boards');
+    saveCache('boards', boards);
+    return boards;
+  } catch (err) {
+    const cached = getCache<KanbanBoard[]>('boards');
+    if (cached) return cached;
+    return [];
+  }
+};
 
-export const apiCreateColumn = (board_id: number, title: string) =>
-  request<KanbanColumn>('/columns', {
-    method: 'POST',
-    body: JSON.stringify({ board_id, title }),
-  });
-export const apiUpdateColumn = (id: number, title: string) =>
-  request<{ id: number; title: string }>(`/columns/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify({ title }),
-  });
-export const apiDeleteColumn = (id: number) =>
-  request<{ success: boolean; id: number }>(`/columns/${id}`, { method: 'DELETE' });
+export const apiGetBoardDetails = async (id: number): Promise<KanbanBoard> => {
+  try {
+    const details = await request<KanbanBoard>(`/boards/${id}`);
+    saveCache(`board_${id}`, details);
+    return details;
+  } catch (err) {
+    const cached = getCache<KanbanBoard>(`board_${id}`);
+    if (cached) return cached;
+    throw err;
+  }
+};
 
-export const apiCreateCard = (card: Partial<KanbanCard> & { labelIds?: number[] }) =>
-  request<KanbanCard>('/cards', {
-    method: 'POST',
-    body: JSON.stringify(card),
-  });
+export const apiCreateBoard = async (board: { title: string; description?: string; color?: string }): Promise<KanbanBoard> => {
+  try {
+    return await request<KanbanBoard>('/boards', {
+      method: 'POST',
+      body: JSON.stringify(board),
+    });
+  } catch (err) {
+    enqueueSyncAction('CREATE_BOARD', board);
+    const mockBoard: KanbanBoard = {
+      id: Date.now(),
+      title: board.title,
+      description: board.description || '',
+      color: board.color || '#3b82f6',
+      created_at: new Date().toISOString(),
+      columns: [],
+    };
+    return mockBoard;
+  }
+};
+
+export const apiUpdateBoard = async (id: number, board: { title: string; description?: string; color?: string }) => {
+  try {
+    return await request<KanbanBoard>(`/boards/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(board),
+    });
+  } catch (err) {
+    enqueueSyncAction('UPDATE_BOARD', { id, data: board });
+    const mockBoard: KanbanBoard = {
+      id,
+      title: board.title,
+      description: board.description || '',
+      color: board.color || '#3b82f6',
+      created_at: new Date().toISOString(),
+      columns: [],
+    };
+    return mockBoard;
+  }
+};
+
+export const apiDeleteBoard = async (id: number) => {
+  try {
+    return await request<{ success: boolean; id: number }>(`/boards/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    enqueueSyncAction('DELETE_BOARD', { id });
+    return { success: true, id };
+  }
+};
+
+export const apiCreateColumn = async (board_id: number, title: string): Promise<KanbanColumn> => {
+  try {
+    return await request<KanbanColumn>('/columns', {
+      method: 'POST',
+      body: JSON.stringify({ board_id, title }),
+    });
+  } catch (err) {
+    enqueueSyncAction('CREATE_COLUMN', { board_id, title });
+    const mockColumn: KanbanColumn = {
+      id: Date.now(),
+      board_id,
+      title,
+      position: 0,
+      cards: [],
+    };
+    return mockColumn;
+  }
+};
+
+export const apiUpdateColumn = async (id: number, title: string) => {
+  try {
+    return await request<{ id: number; title: string }>(`/columns/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ title }),
+    });
+  } catch (err) {
+    enqueueSyncAction('UPDATE_COLUMN', { id, title });
+    return { id, title };
+  }
+};
+
+export const apiDeleteColumn = async (id: number) => {
+  try {
+    return await request<{ success: boolean; id: number }>(`/columns/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    enqueueSyncAction('DELETE_COLUMN', { id });
+    return { success: true, id };
+  }
+};
+
+export const apiCreateCard = async (card: Partial<KanbanCard> & { labelIds?: number[] }): Promise<KanbanCard> => {
+  try {
+    return await request<KanbanCard>('/cards', {
+      method: 'POST',
+      body: JSON.stringify(card),
+    });
+  } catch (err) {
+    enqueueSyncAction('CREATE_CARD', card);
+    const mockCard: KanbanCard = {
+      id: Date.now(),
+      column_id: card.column_id || 0,
+      board_id: card.board_id || 0,
+      title: card.title || '',
+      description: card.description || '',
+      checklist: card.checklist || [],
+      priority: card.priority || 'Média',
+      position: card.position || 0,
+      due_date: card.due_date || null,
+      is_trashed: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      labels: [],
+    };
+    return mockCard;
+  }
+};
+
 export const apiSaveCard = apiCreateCard;
-export const apiUpdateCard = (id: number, card: Partial<KanbanCard> & { labelIds?: number[] }) =>
-  request<KanbanCard>(`/cards/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(card),
-  });
-export const apiMoveCard = (id: number, target_column_id: number, new_position: number) =>
-  request<{ success: boolean }>(`/cards/${id}/move`, {
-    method: 'PATCH',
-    body: JSON.stringify({ target_column_id, new_position }),
-  });
-export const apiDeleteCard = (id: number) =>
-  request<{ success: boolean; id: number }>(`/cards/${id}`, { method: 'DELETE' });
+
+export const apiUpdateCard = async (id: number, card: Partial<KanbanCard> & { labelIds?: number[] }): Promise<KanbanCard> => {
+  try {
+    return await request<KanbanCard>(`/cards/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(card),
+    });
+  } catch (err) {
+    enqueueSyncAction('UPDATE_CARD', { id, data: card });
+    const mockCard: KanbanCard = {
+      id,
+      column_id: card.column_id || 0,
+      board_id: card.board_id || 0,
+      title: card.title || '',
+      description: card.description || '',
+      checklist: card.checklist || [],
+      priority: card.priority || 'Média',
+      position: card.position || 0,
+      due_date: card.due_date || null,
+      is_trashed: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      labels: [],
+    };
+    return mockCard;
+  }
+};
+
+export const apiMoveCard = async (id: number, target_column_id: number, new_position: number) => {
+  try {
+    return await request<{ success: boolean }>(`/cards/${id}/move`, {
+      method: 'PATCH',
+      body: JSON.stringify({ target_column_id, new_position }),
+    });
+  } catch (err) {
+    enqueueSyncAction('MOVE_CARD', { id, target_column_id, new_position });
+    return { success: true };
+  }
+};
+
+export const apiDeleteCard = async (id: number) => {
+  try {
+    return await request<{ success: boolean; id: number }>(`/cards/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    enqueueSyncAction('DELETE_CARD', { id });
+    return { success: true, id };
+  }
+};
 
 // CALENDAR API
 export const apiGetCalendarEvents = () => request<{ notes: CalendarEvent[]; cards: CalendarEvent[] }>('/calendar');
 
 // DOCUMENTS API
-export const apiGetDocuments = () => request<PdfDocument[]>('/documents');
+export const apiGetDocuments = async (): Promise<PdfDocument[]> => {
+  try {
+    const docs = await request<PdfDocument[]>('/documents');
+    saveCache('documents', docs);
+    return docs;
+  } catch (err) {
+    const cached = getCache<PdfDocument[]>('documents');
+    if (cached) return cached;
+    return [];
+  }
+};
 
 export const apiUploadDocument = async (file: File): Promise<PdfDocument> => {
   const formData = new FormData();
@@ -330,29 +595,91 @@ export const apiDeleteDocument = (id: number) =>
   request<{ success: boolean; id: number }>(`/documents/${id}`, { method: 'DELETE' });
 
 // TRASH API
-export const apiGetTrashItems = () => request<TrashedItem>('/trash');
+export const apiGetTrashItems = async (): Promise<TrashedItem> => {
+  try {
+    const data = await request<TrashedItem>('/trash');
+    saveCache('trash', data);
+    return data;
+  } catch (err) {
+    const cached = getCache<TrashedItem>('trash');
+    if (cached) return cached;
+    return { notes: [], cards: [] };
+  }
+};
+
 export const apiRestoreTrashItem = (type: 'note' | 'card', id: number) =>
   request<{ success: boolean }>('/trash/restore', {
     method: 'POST',
     body: JSON.stringify({ type, id }),
   });
+
 export const apiEmptyTrash = () => request<{ success: boolean }>('/trash/empty', { method: 'DELETE' });
 
 // WORKOUT API
-export const apiGetWorkouts = () => request<WorkoutRoutine[]>('/workouts');
+export const apiGetWorkouts = async (): Promise<WorkoutRoutine[]> => {
+  try {
+    const workouts = await request<WorkoutRoutine[]>('/workouts');
+    saveCache('workouts', workouts);
+    return workouts;
+  } catch (err) {
+    const cached = getCache<WorkoutRoutine[]>('workouts');
+    if (cached) return cached;
+    return [];
+  }
+};
+
 export const apiGetSharedWorkout = (id: number) => request<WorkoutRoutine & { author_name?: string }>(`/workouts/shared/${id}`);
-export const apiCreateWorkout = (data: Partial<WorkoutRoutine>) =>
-  request<WorkoutRoutine>('/workouts', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-export const apiUpdateWorkout = (id: number, data: Partial<WorkoutRoutine>) =>
-  request<WorkoutRoutine>(`/workouts/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  });
-export const apiDeleteWorkout = (id: number) =>
-  request<{ success: boolean }>(`/workouts/${id}`, { method: 'DELETE' });
+
+export const apiCreateWorkout = async (data: Partial<WorkoutRoutine>): Promise<WorkoutRoutine> => {
+  try {
+    return await request<WorkoutRoutine>('/workouts', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  } catch (err) {
+    enqueueSyncAction('CREATE_WORKOUT', data);
+    const mockWorkout: WorkoutRoutine = {
+      id: Date.now(),
+      user_id: 0,
+      title: data.title || '',
+      description: data.description,
+      days: data.days || [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    return mockWorkout;
+  }
+};
+
+export const apiUpdateWorkout = async (id: number, data: Partial<WorkoutRoutine>): Promise<WorkoutRoutine> => {
+  try {
+    return await request<WorkoutRoutine>(`/workouts/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  } catch (err) {
+    enqueueSyncAction('UPDATE_WORKOUT', { id, data });
+    const mockWorkout: WorkoutRoutine = {
+      id,
+      user_id: 0,
+      title: data.title || '',
+      description: data.description,
+      days: data.days || [],
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    return mockWorkout;
+  }
+};
+
+export const apiDeleteWorkout = async (id: number): Promise<{ success: boolean }> => {
+  try {
+    return await request<{ success: boolean }>(`/workouts/${id}`, { method: 'DELETE' });
+  } catch (err) {
+    enqueueSyncAction('DELETE_WORKOUT', { id });
+    return { success: true };
+  }
+};
 
 // VAULT API
 export const apiGetVaultStatus = () => request<{ isConfigured: boolean }>('/vault/status');

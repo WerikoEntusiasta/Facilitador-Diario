@@ -24,6 +24,7 @@ interface KeepNotesProps {
   notes: Note[];
   labels: Label[];
   searchQuery: string;
+  onSearchChange: (query: string) => void;
   selectedLabelId: number | null;
   onSelectLabel: (id: number | null) => void;
   onCreateNote: (note: Partial<Note> & { labelIds?: number[] }) => Promise<void>;
@@ -38,6 +39,7 @@ export const KeepNotes: React.FC<KeepNotesProps> = ({
   notes,
   labels,
   searchQuery,
+  onSearchChange,
   selectedLabelId,
   onSelectLabel,
   onCreateNote,
@@ -139,6 +141,29 @@ export const KeepNotes: React.FC<KeepNotesProps> = ({
 
   return (
     <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
+      {/* Search Bar for Notes */}
+      <div className="max-w-xl mx-auto relative">
+        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+          <Search size={18} />
+        </div>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Pesquisar notas por título, conteúdo, etiquetas ou listas..."
+          className="w-full pl-10 pr-10 py-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => onSearchChange('')}
+            className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            title="Limpar busca"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
       {/* Active Filter Banner if label or search is set */}
       {(selectedLabelId || searchQuery) && (
         <div className="flex items-center justify-between p-3.5 bg-indigo-50 dark:bg-indigo-950/40 rounded-2xl border border-indigo-200 dark:border-indigo-800">

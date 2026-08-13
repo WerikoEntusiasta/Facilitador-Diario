@@ -26,6 +26,7 @@ import {
   getServerUrl,
   isNativeApp,
 } from './lib/api';
+import { startSyncMonitor } from './lib/offlineSync';
 import { playFartSound } from './lib/fartSound';
 
 import { Navbar } from './components/Navbar';
@@ -34,7 +35,6 @@ import { KeepNotes } from './components/KeepNotes';
 import { NoteEditorModal } from './components/NoteEditorModal';
 import { KanbanView } from './components/KanbanView';
 import { KanbanCardModal } from './components/KanbanCardModal';
-import { CalendarView } from './components/CalendarView';
 import { PdfCenter } from './components/PdfCenter';
 import { ArchiveTrashView } from './components/ArchiveTrashView';
 import { LabelManagerModal } from './components/LabelManagerModal';
@@ -49,6 +49,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { TasksView } from './components/TasksView';
 import { WidgetsHubView } from './components/WidgetsHubView';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
+import { UserDashboardView } from './components/UserDashboardView';
 import {
   getStoredActiveSession,
   setStoredActiveSession,
@@ -59,7 +60,7 @@ import {
 } from './lib/fastingStore';
 
 export default function App() {
-  const [currentTab, setCurrentTab] = useState<ViewTab>('notes');
+  const [currentTab, setCurrentTab] = useState<ViewTab>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLabelId, setSelectedLabelId] = useState<number | null>(null);
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -255,6 +256,11 @@ export default function App() {
   useEffect(() => {
     checkCurrentUser();
     loadInitialData();
+
+    const cleanup = startSyncMonitor(() => {
+      loadInitialData();
+    });
+    return () => cleanup();
   }, [currentUser?.id]);
 
   const checkCurrentUser = async () => {
@@ -495,6 +501,7 @@ export default function App() {
           trashCount={trashCount}
           pdfCount={pdfCount}
           currentUser={currentUser}
+          onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
         />
 
         {/* Main Content Area */}
@@ -506,6 +513,7 @@ export default function App() {
               notes={notes}
               labels={labels}
               searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
               selectedLabelId={selectedLabelId}
               onSelectLabel={setSelectedLabelId}
               onCreateNote={handleCreateNote}
@@ -535,7 +543,7 @@ export default function App() {
             />
           )}
 
-          {currentTab === 'calendar' && <CalendarView />}
+
 
           {currentTab === 'tasks' && <TasksView />}
 
@@ -567,7 +575,28 @@ export default function App() {
             />
           )}
 
-          {currentTab === 'vault' && <VaultView />}
+          {currentTab === 'dashboard' && (
+            <UserDashboardView
+              notes={notes}
+              activeFastingSession={activeFastingSession}
+              setCurrentTab={setCurrentTab}
+              onOpenNewNote={() => {
+                setEditingNote({ title: '', content: '' });
+                setIsNoteModalOpen(true);
+              }}
+              onEditNote={(note) => {
+                setEditingNote(note);
+                setIsNoteModalOpen(true);
+              }}
+              onTogglePin={handleTogglePin}
+              onStartFasting={handleStartFasting}
+              onEndFasting={handleEndFasting}
+              onCancelFasting={handleCancelFasting}
+              onAddWater={handleAddFastingWater}
+            />
+          )}
+
+          {currentTab === 'vault' && <VaultView currentUser={currentUser} />}
 
           {currentTab === 'pdfs' && <PdfCenter />}
 
@@ -576,6 +605,7 @@ export default function App() {
               currentUser={currentUser}
               onOpenAuth={() => setIsAuthModalOpen(true)}
               onOpenServerSettings={() => setIsServerModalOpen(true)}
+              onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
             />
           )}
 
@@ -585,6 +615,7 @@ export default function App() {
               allLabels={labels}
               onOpenNoteEdit={handleOpenNoteModal}
               onRefreshCounts={loadInitialData}
+              currentUser={currentUser}
             />
           )}
         </main>

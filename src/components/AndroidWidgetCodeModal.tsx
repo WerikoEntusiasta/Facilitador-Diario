@@ -7,7 +7,7 @@ interface AndroidWidgetCodeModalProps {
 }
 
 export const AndroidWidgetCodeModal: React.FC<AndroidWidgetCodeModalProps> = ({ isOpen, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'kotlin' | 'xml' | 'manifest'>('kotlin');
+  const [activeTab, setActiveTab] = useState<'kotlin' | 'xml' | 'info' | 'manifest'>('kotlin');
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
@@ -87,7 +87,21 @@ class KeepFlowWidgetProvider : AppWidgetProvider() {
         android:resource="@xml/keepflow_widget_info" />
 </receiver>`;
 
-  const currentText = activeTab === 'kotlin' ? kotlinCode : activeTab === 'xml' ? xmlLayoutCode : manifestCode;
+  const widgetInfoCode = `<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:updatePeriodMillis="1800000"
+    android:initialLayout="@layout/widget_keepflow_layout"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen">
+</appwidget-provider>`;
+
+  const currentText = 
+    activeTab === 'kotlin' ? kotlinCode : 
+    activeTab === 'xml' ? xmlLayoutCode : 
+    activeTab === 'info' ? widgetInfoCode : 
+    manifestCode;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(currentText);
@@ -122,6 +136,7 @@ class KeepFlowWidgetProvider : AppWidgetProvider() {
           {[
             { id: 'kotlin', label: 'AppWidgetProvider.kt', icon: Cpu },
             { id: 'xml', label: 'widget_layout.xml', icon: Code },
+            { id: 'info', label: 'keepflow_widget_info.xml', icon: Layers },
             { id: 'manifest', label: 'AndroidManifest.xml', icon: Smartphone },
           ].map((tab) => {
             const Icon = tab.icon;

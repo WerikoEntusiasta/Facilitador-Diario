@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   Sun,
@@ -7,11 +7,13 @@ import {
   X,
   Tag,
   User as UserIcon,
-  Server,
-  RefreshCw,
   Bell,
+  WifiOff,
+  RefreshCw,
+  CloudCheck,
 } from 'lucide-react';
 import { ViewTab, User } from '../types';
+import { subscribeSyncState, SyncState } from '../lib/offlineSync';
 
 import { Logo } from './Logo';
 
@@ -46,6 +48,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenServerSettings,
   onOpenNotificationModal,
 }) => {
+  const [syncState, setSyncState] = useState<SyncState>({
+    isOnline: true,
+    isSyncing: false,
+    pendingCount: 0,
+    lastSyncedAt: Date.now(),
+  });
+
+  useEffect(() => {
+    return subscribeSyncState((st) => setSyncState(st));
+  }, []);
+
   const handleUpdateApp = () => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations().then((registrations) => {
@@ -60,6 +73,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const getTabTitle = () => {
     switch (currentTab) {
+      case 'dashboard':
+        return 'Dashboard do Usuário';
       case 'notes':
         return 'Bloco de Notas';
       case 'kanban':
@@ -78,8 +93,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         return 'Notas Arquivadas';
       case 'trash':
         return 'Lixeira';
-      case 'android_app':
-        return 'App Android & SQLite Sync';
+      case 'weather':
+        return 'Previsão do Tempo (Catanduva/SP)';
+      case 'ux_guide':
+        return 'Diretrizes e Princípios de UX';
       default:
         return 'KeepBoard';
     }
@@ -133,25 +150,24 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Action buttons */}
         <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleUpdateApp}
-            className="p-2 rounded-xl text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition flex items-center gap-1.5 text-xs font-semibold border border-emerald-200/60 dark:border-emerald-800/60"
-            title="Atualizar App para a versão mais recente"
-          >
-            <RefreshCw size={17} />
-            <span className="hidden xl:inline">Atualizar</span>
-          </button>
+          {/* Connection Status Badge */}
+          {syncState.isSyncing ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-xs font-medium animate-pulse" title="Sincronizando alterações com o servidor...">
+              <RefreshCw size={14} className="animate-spin" />
+              <span className="hidden sm:inline">Sincronizando...</span>
+            </div>
+          ) : !syncState.isOnline ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-xs font-medium" title="Modo Offline Ativo. Seus dados e novas alterações estão salvos no dispositivo por até 3 dias.">
+              <WifiOff size={14} />
+              <span className="hidden sm:inline">Modo Offline (Cache 3 dias)</span>
+            </div>
+          ) : syncState.pendingCount > 0 ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-800 text-xs font-medium" title={`${syncState.pendingCount} alterações salvas localmente e aguardando envio`}>
+              <CloudCheck size={14} />
+              <span className="hidden sm:inline">{syncState.pendingCount} pendente(s)</span>
+            </div>
+          ) : null}
 
-          {onOpenServerSettings && (
-            <button
-              onClick={onOpenServerSettings}
-              className="p-2 rounded-xl text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition flex items-center gap-1.5 text-xs font-semibold border border-blue-200/60 dark:border-blue-800/60"
-              title="Configurar Servidor Remoto"
-            >
-              <Server size={17} />
-              <span className="hidden xl:inline">Servidor</span>
-            </button>
-          )}
 
           <button
             onClick={onOpenLabelManager}
@@ -205,7 +221,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {currentUser ? currentUser.name : 'Entrar'}
               </span>
               <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                {currentUser ? 'SQLite Sync' : 'Criar Conta'}
+                {currentUser ? (currentUser.is_admin === 1 ? 'SQLite Sync' : 'Sincronizado') : 'Criar Conta'}
               </span>
             </div>
           </button>

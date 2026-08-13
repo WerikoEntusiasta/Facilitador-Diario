@@ -169,7 +169,7 @@ export interface FastingSession {
   protocol_name?: string;
 }
 
-export type ViewTab = 'notes' | 'kanban' | 'calendar' | 'workouts' | 'fasting' | 'tasks' | 'widgets' | 'pdfs' | 'vault' | 'archive' | 'trash' | 'admin';
+export type ViewTab = 'dashboard' | 'notes' | 'kanban' | 'workouts' | 'fasting' | 'tasks' | 'widgets' | 'pdfs' | 'vault' | 'archive' | 'trash' | 'admin';
 
 export interface TaskItem {
   id: string;

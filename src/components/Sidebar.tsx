@@ -1,7 +1,7 @@
 import React from 'react';
 import {
+  LayoutDashboard,
   FileText,
-  Kanban,
   Calendar,
   FileCheck,
   FolderArchive,
@@ -16,6 +16,8 @@ import {
   Shield,
   CheckSquare,
   RefreshCw,
+  Bell,
+  Sun,
 } from 'lucide-react';
 import { ViewTab, Label, User } from '../types';
 
@@ -33,6 +35,7 @@ interface SidebarProps {
   trashCount?: number;
   pdfCount?: number;
   currentUser?: User | null;
+  onOpenNotificationModal?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -49,16 +52,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   trashCount,
   pdfCount,
   currentUser,
+  onOpenNotificationModal,
 }) => {
   const navItems = [
-    { id: 'notes' as ViewTab, label: 'Notas (Keep)', icon: FileText, count: notesCount },
-    { id: 'kanban' as ViewTab, label: 'Quadros Kanban', icon: Kanban },
+    { id: 'dashboard' as ViewTab, label: 'Dashboard Geral', icon: LayoutDashboard },
     { id: 'tasks' as ViewTab, label: 'Menu Tarefas', icon: CheckSquare },
-    { id: 'calendar' as ViewTab, label: 'Calendário & Lembretes', icon: Calendar },
+    { id: 'notes' as ViewTab, label: 'Notas (Keep)', icon: FileText, count: notesCount },
     { id: 'workouts' as ViewTab, label: 'Treinos da Academia', icon: Dumbbell },
     { id: 'fasting' as ViewTab, label: 'Jejum Intermitente', icon: Flame },
-    { id: 'vault' as ViewTab, label: 'Cofre de Senhas', icon: ShieldCheck },
     { id: 'pdfs' as ViewTab, label: 'Central de PDFs', icon: FileCheck, count: pdfCount },
+    { id: 'vault' as ViewTab, label: 'Cofre de Senhas', icon: ShieldCheck },
     { id: 'archive' as ViewTab, label: 'Arquivados', icon: FolderArchive, count: archiveCount },
     { id: 'trash' as ViewTab, label: 'Lixeira', icon: Trash2, count: trashCount },
   ];
@@ -131,7 +134,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 );
               })}
             </nav>
-          </div>
+
+              {onOpenNotificationModal && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => {
+                      onOpenNotificationModal();
+                      onCloseMobile();
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:text-amber-700 dark:hover:text-amber-300 transition border border-dashed border-slate-200 dark:border-slate-800"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Bell size={18} className="text-amber-500" />
+                      <span>Notificações & DND</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+                      Config
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
 
           {/* Labels Section */}
           <div>
@@ -194,7 +217,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="p-3 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-500 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>SQLite Ativo</span>
+            <span>{currentUser?.is_admin === 1 ? 'SQLite Ativo' : 'Sincronização Ativa'}</span>
           </div>
           <button
             onClick={() => {
