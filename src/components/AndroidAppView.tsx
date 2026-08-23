@@ -12,7 +12,7 @@ interface AndroidAppViewProps {
 
 export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onOpenAuth, onOpenServerSettings, onOpenNotificationModal }) => {
   const isAdmin = currentUser?.is_admin === 1;
-  const [simulatorView, setSimulatorView] = useState<'notes' | 'kanban' | 'widget' | 'sync'>('widget');
+  const [simulatorView, setSimulatorView] = useState<'notes' | 'kanban' | 'widget' | 'tracker' | 'sync'>('widget');
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [installSuccess, setInstallSuccess] = useState(false);
@@ -565,7 +565,15 @@ class NotesRemoteViewsFactory(private val context: Context, intent: Intent) : Re
                     simulatorView === 'widget' ? 'border-b-2 border-blue-600 text-blue-600 font-bold' : 'text-slate-500'
                   }`}
                 >
-                  Home Widget
+                  Widget
+                </button>
+                <button
+                  onClick={() => setSimulatorView('tracker')}
+                  className={`flex-1 py-2 text-center ${
+                    simulatorView === 'tracker' ? 'border-b-2 border-blue-600 text-blue-600 font-bold' : 'text-slate-500'
+                  }`}
+                >
+                  GPS
                 </button>
                 <button
                   onClick={() => setSimulatorView('notes')}
@@ -595,6 +603,71 @@ class NotesRemoteViewsFactory(private val context: Context, intent: Intent) : Re
 
               {/* Simulator Main Content */}
               <div className="flex-1 p-3 overflow-y-auto space-y-2 text-xs">
+                {simulatorView === 'tracker' && (
+                  <div className="space-y-2.5 py-1">
+                    <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider text-center">
+                      GPS Live Activity Tracker (React Native)
+                    </div>
+
+                    {/* Simulated Map View with Route */}
+                    <div className="h-36 w-full bg-slate-950 rounded-2xl relative overflow-hidden border border-slate-700 shadow-inner flex flex-col justify-between p-2.5">
+                      <div className="flex justify-between items-center z-10">
+                        <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-mono px-2 py-0.5 rounded-full border border-emerald-500/30">
+                          ● GPS High Accuracy
+                        </span>
+                        <span className="text-[9px] bg-slate-800/80 text-white font-mono px-2 py-0.5 rounded-full">
+                          Haversine Calc
+                        </span>
+                      </div>
+
+                      {/* Map Route SVG representation */}
+                      <svg className="absolute inset-0 w-full h-full opacity-60">
+                        <path
+                          d="M 30 110 Q 70 40 120 70 T 200 40 T 260 80"
+                          fill="transparent"
+                          stroke="#10b981"
+                          strokeWidth="4"
+                          strokeDasharray="4 2"
+                        />
+                        <circle cx="30" cy="110" r="5" fill="#10b981" />
+                        <circle cx="260" cy="80" r="6" fill="#38bdf8" />
+                      </svg>
+
+                      <div className="z-10 flex justify-between items-end">
+                        <div className="text-[9px] text-slate-300 font-bold bg-slate-900/90 px-2 py-1 rounded-lg">
+                          🟢 Início: Catanduva
+                        </div>
+                        <div className="text-[9px] text-sky-300 font-bold bg-slate-900/90 px-2 py-1 rounded-lg">
+                          🔵 Posição Atual
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Telemetry Metrics Grid */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="p-2 bg-slate-800/90 rounded-xl border border-slate-700">
+                        <div className="text-[9px] text-slate-400 font-bold uppercase">Distância</div>
+                        <div className="text-sm font-black text-emerald-400 font-mono">4.28 km</div>
+                      </div>
+                      <div className="p-2 bg-slate-800/90 rounded-xl border border-slate-700">
+                        <div className="text-[9px] text-slate-400 font-bold uppercase">Tempo</div>
+                        <div className="text-sm font-black text-white font-mono">24:18</div>
+                      </div>
+                      <div className="p-2 bg-slate-800/90 rounded-xl border border-slate-700">
+                        <div className="text-[9px] text-slate-400 font-bold uppercase">Passos</div>
+                        <div className="text-sm font-black text-sky-400 font-mono">5.820</div>
+                      </div>
+                      <div className="p-2 bg-slate-800/90 rounded-xl border border-slate-700">
+                        <div className="text-[9px] text-slate-400 font-bold uppercase">Calorias</div>
+                        <div className="text-sm font-black text-orange-400 font-mono">295 kcal</div>
+                      </div>
+                    </div>
+
+                    <button className="w-full py-2 bg-emerald-600 text-white rounded-xl text-[11px] font-bold text-center">
+                      ▶ Iniciar Atividade Física
+                    </button>
+                  </div>
+                )}
                 {simulatorView === 'widget' && (
                   <div className="space-y-3 py-1">
                     <div className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider text-center">Início Android (AppWidget Nativo)</div>
