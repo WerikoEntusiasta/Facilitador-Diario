@@ -57,6 +57,7 @@ import { PomodoroFocusModal } from './components/PomodoroFocusModal';
 import { TemplateSelectorModal } from './components/TemplateSelectorModal';
 import { BackupRestoreModal } from './components/BackupRestoreModal';
 import { NoteHistoryModal, NoteRevision } from './components/NoteHistoryModal';
+import { EditProfileModal } from './components/EditProfileModal';
 import {
   getStoredActiveSession,
   setStoredActiveSession,
@@ -117,6 +118,7 @@ export default function App() {
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
 
   // New Modals for Feature Expansion
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isPomodoroOpen, setIsPomodoroOpen] = useState(false);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
@@ -569,6 +571,7 @@ export default function App() {
         onOpenLabelManager={() => setIsLabelModalOpen(true)}
         currentUser={currentUser}
         onOpenAuth={() => setIsAuthModalOpen(true)}
+        onOpenEditProfile={() => setIsEditProfileOpen(true)}
         onOpenServerSettings={() => setIsServerModalOpen(true)}
         onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
         onOpenGlobalSearch={() => setIsGlobalSearchOpen(true)}
@@ -597,6 +600,7 @@ export default function App() {
           pdfCount={pdfCount}
           currentUser={currentUser}
           onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
+          onOpenEditProfile={() => setIsEditProfileOpen(true)}
         />
 
         {/* Main Content Area */}
@@ -675,6 +679,8 @@ export default function App() {
               notes={notes}
               activeFastingSession={activeFastingSession}
               setCurrentTab={setCurrentTab}
+              currentUser={currentUser}
+              onOpenEditProfile={() => setIsEditProfileOpen(true)}
               onOpenNewNote={() => {
                 setEditingNote({ title: '', content: '' });
                 setIsNoteModalOpen(true);
@@ -717,6 +723,16 @@ export default function App() {
       </div>
 
       {/* MODALS */}
+      <EditProfileModal
+        isOpen={isEditProfileOpen}
+        onClose={() => setIsEditProfileOpen(false)}
+        currentUser={currentUser}
+        onUpdateSuccess={(user) => {
+          setCurrentUser(user);
+        }}
+        onLogout={handleLogout}
+      />
+
       <AuthModal
         isOpen={isAuthModalOpen || !currentUser}
         onClose={() => {

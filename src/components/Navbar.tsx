@@ -32,6 +32,7 @@ interface NavbarProps {
   onOpenLabelManager: () => void;
   currentUser: User | null;
   onOpenAuth: () => void;
+  onOpenEditProfile?: () => void;
   onOpenServerSettings?: () => void;
   onOpenNotificationModal?: () => void;
   onOpenGlobalSearch?: () => void;
@@ -52,6 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenLabelManager,
   currentUser,
   onOpenAuth,
+  onOpenEditProfile,
   onOpenServerSettings,
   onOpenNotificationModal,
   onOpenGlobalSearch,
@@ -247,29 +249,35 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
 
-          {/* User Auth Profile Button */}
+          {/* User Auth / Profile Button */}
           <button
-            onClick={onOpenAuth}
-            className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition border border-slate-200 dark:border-slate-700"
-            title={currentUser ? `Conectado como ${currentUser.name}` : 'Fazer Login / Criar Conta'}
+            onClick={() => {
+              if (currentUser && onOpenEditProfile) {
+                onOpenEditProfile();
+              } else {
+                onOpenAuth();
+              }
+            }}
+            className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition border border-slate-200 dark:border-slate-700 cursor-pointer group"
+            title={currentUser ? `Editar Perfil & Foto (${currentUser.name})` : 'Fazer Login / Criar Conta'}
           >
             {currentUser?.avatar ? (
               <img
                 src={currentUser.avatar}
                 alt={currentUser.name}
-                className="w-7 h-7 rounded-lg object-cover ring-2 ring-emerald-500/30"
+                className="w-7 h-7 rounded-lg object-cover ring-2 ring-emerald-500/40 group-hover:scale-105 transition"
               />
             ) : (
-              <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 flex items-center justify-center">
+              <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 flex items-center justify-center group-hover:scale-105 transition">
                 <UserIcon size={16} />
               </div>
             )}
             <div className="hidden sm:block text-left text-xs pr-1">
-              <span className="block font-bold text-slate-800 dark:text-slate-200 max-w-[90px] truncate">
+              <span className="block font-bold text-slate-800 dark:text-slate-200 max-w-[90px] truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
                 {currentUser ? currentUser.name : 'Entrar'}
               </span>
               <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                {currentUser ? (currentUser.is_admin === 1 ? 'SQLite Sync' : 'Sincronizado') : 'Criar Conta'}
+                {currentUser ? 'Editar Perfil ⚙️' : 'Criar Conta'}
               </span>
             </div>
           </button>

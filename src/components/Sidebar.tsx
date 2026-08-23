@@ -36,6 +36,7 @@ interface SidebarProps {
   pdfCount?: number;
   currentUser?: User | null;
   onOpenNotificationModal?: () => void;
+  onOpenEditProfile?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -53,6 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   pdfCount,
   currentUser,
   onOpenNotificationModal,
+  onOpenEditProfile,
 }) => {
   const navItems = [
     { id: 'dashboard' as ViewTab, label: 'Dashboard Geral', icon: LayoutDashboard },
@@ -213,30 +215,65 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        {/* Footer info */}
-        <div className="p-3 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-400 dark:text-slate-500 flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span>{currentUser?.is_admin === 1 ? 'SQLite Ativo' : 'Sincronização Ativa'}</span>
+        {/* User Profile Card & Footer info */}
+        <div className="p-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
+          {currentUser && (
+            <button
+              onClick={() => {
+                if (onOpenEditProfile) onOpenEditProfile();
+                onCloseMobile();
+              }}
+              className="w-full p-2 rounded-2xl bg-white dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 hover:border-indigo-500/50 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/20 transition flex items-center justify-between text-left group cursor-pointer"
+              title="Clique para editar seu perfil e foto"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                {currentUser.avatar ? (
+                  <img
+                    src={currentUser.avatar}
+                    alt={currentUser.name}
+                    className="w-8 h-8 rounded-xl object-cover ring-2 ring-indigo-500/30 group-hover:scale-105 transition"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-xs">
+                    {currentUser.name?.[0]?.toUpperCase() || 'U'}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
+                    {currentUser.name}
+                  </div>
+                  <div className="text-[10px] text-slate-400 truncate">
+                    Editar Perfil & Foto ⚙️
+                  </div>
+                </div>
+              </div>
+            </button>
+          )}
+
+          <div className="text-xs text-slate-400 dark:text-slate-500 flex items-center justify-between pt-1">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span className="text-[11px]">{currentUser?.is_admin === 1 ? 'SQLite Ativo' : 'Sincronizado'}</span>
+            </div>
+            <button
+              onClick={() => {
+                if ('serviceWorker' in navigator) {
+                  navigator.serviceWorker.getRegistrations().then((registrations) => {
+                    for (let registration of registrations) {
+                      registration.update();
+                    }
+                  });
+                }
+                const cleanUrl = window.location.href.split('?')[0].split('#')[0];
+                window.location.replace(`${cleanUrl}?v=${Date.now()}`);
+              }}
+              className="flex items-center gap-1 px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition text-[11px] font-semibold"
+              title="Atualizar Aplicativo"
+            >
+              <RefreshCw size={12} />
+              <span>Atualizar</span>
+            </button>
           </div>
-          <button
-            onClick={() => {
-              if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.getRegistrations().then((registrations) => {
-                  for (let registration of registrations) {
-                    registration.update();
-                  }
-                });
-              }
-              const cleanUrl = window.location.href.split('?')[0].split('#')[0];
-              window.location.replace(`${cleanUrl}?v=${Date.now()}`);
-            }}
-            className="flex items-center gap-1 px-2 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition font-semibold"
-            title="Atualizar Aplicativo"
-          >
-            <RefreshCw size={13} />
-            <span>Atualizar</span>
-          </button>
         </div>
       </aside>
     </>

@@ -29,7 +29,7 @@ import {
   ChevronRight,
   Smartphone,
 } from 'lucide-react';
-import { Note, FastingSession, TaskItem } from '../types';
+import { Note, FastingSession, TaskItem, User } from '../types';
 import { DashboardGpsTrackerCard } from './DashboardGpsTrackerCard';
 
 interface UserDashboardViewProps {
@@ -43,6 +43,8 @@ interface UserDashboardViewProps {
   onEndFasting?: () => void;
   onCancelFasting?: () => void;
   onAddWater?: (ml: number) => void;
+  currentUser?: User | null;
+  onOpenEditProfile?: () => void;
 }
 
 interface WeatherDaily {
@@ -81,6 +83,8 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   onEndFasting,
   onCancelFasting,
   onAddWater,
+  currentUser,
+  onOpenEditProfile,
 }) => {
   const [latestPdf, setLatestPdf] = useState<{ id: string; name: string; date?: string } | null>(null);
   const [weather, setWeather] = useState<WeatherSummary | null>(null);
@@ -335,13 +339,36 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
             <Activity className="w-3.5 h-3.5 text-emerald-400" />
             Sistema KeepBoard • Painel Central Reorganizado
           </div>
-          <h1 className="text-2xl sm:text-4xl font-black tracking-tight">Painel Executivo Integrado</h1>
+          <h1 className="text-2xl sm:text-4xl font-black tracking-tight">
+            {currentUser?.name ? `Olá, ${currentUser.name.split(' ')[0]}!` : 'Painel Executivo Integrado'}
+          </h1>
           <p className="text-xs sm:text-sm text-indigo-200 max-w-2xl leading-relaxed">
             Acesse suas notas com fixação prioritária, lista de tarefas, controle de jejum, telemetria de treinos e previsão do tempo de forma clara e estruturada.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 z-10">
+          {onOpenEditProfile && (
+            <button
+              onClick={onOpenEditProfile}
+              className="px-3.5 py-2.5 rounded-2xl bg-indigo-500/30 hover:bg-indigo-500/50 backdrop-blur-md text-white font-semibold text-xs transition border border-indigo-300/30 flex items-center gap-2.5 shadow-sm cursor-pointer group"
+              title="Editar Foto e Perfil"
+            >
+              {currentUser?.avatar ? (
+                <img
+                  src={currentUser.avatar}
+                  alt={currentUser.name}
+                  className="w-5 h-5 rounded-full object-cover ring-1 ring-white/50"
+                />
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-bold">
+                  {currentUser?.name?.[0]?.toUpperCase() || 'U'}
+                </div>
+              )}
+              <span>Editar Perfil & Foto</span>
+            </button>
+          )}
+
           <button
             onClick={() => onOpenNewNote && onOpenNewNote()}
             className="px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition flex items-center gap-2 shadow-sm cursor-pointer"
