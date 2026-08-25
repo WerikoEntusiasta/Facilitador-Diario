@@ -296,18 +296,20 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
             {/* Option 2: Capacitor / Android Studio */}
             <div className="p-4 bg-slate-800/80 rounded-xl border border-slate-700 space-y-2">
               <span className="text-xs font-bold text-blue-400 flex items-center gap-1.5">
-                <Play className="w-4 h-4" /> Opção 2: Localmente via Android Studio (Capacitor)
+                <Play className="w-4 h-4" /> Opção 2: Localmente via Android Studio (Capacitor + Widgets Nativos)
               </span>
               <p className="text-xs text-slate-300">
-                Execute os comandos abaixo no terminal do seu computador após baixar os arquivos:
+                Execute os comandos abaixo no terminal do seu computador após baixar os arquivos para gerar os ícones e os arquivos do Widget nativo:
               </p>
               <div className="p-3 bg-slate-950 rounded-lg text-[11px] font-mono text-emerald-400 overflow-x-auto space-y-1 border border-slate-800">
-                <p># 1. Instalar dependências nativas e sincronizar</p>
+                <p># 1. Instalar dependências e compilar a interface</p>
                 <p className="text-white">npm run build</p>
-                <p className="text-white">npm install @capacitor/core @capacitor/cli @capacitor/android</p>
                 <p className="text-white">npx cap add android</p>
                 <p className="text-white">npx cap sync android</p>
-                <p className="mt-2"># 2. Abrir o projeto no Android Studio e gerar APK</p>
+                <p className="mt-2"># 2. Injetar os Widgets Nativos e Ícones do APK</p>
+                <p className="text-emerald-300">npm run setup:android-widgets</p>
+                <p className="text-emerald-300">npm run generate:android-icons</p>
+                <p className="mt-2"># 3. Abrir no Android Studio e compilar o APK</p>
                 <p className="text-white">npx cap open android</p>
               </div>
             </div>

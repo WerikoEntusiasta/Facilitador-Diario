@@ -12,7 +12,8 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "generate:android-icons": "tsx scripts/generate-android-icons.ts"
+    "generate:android-icons": "tsx scripts/generate-android-icons.ts",
+    "setup:android-widgets": "tsx scripts/setup-android-widgets.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.0",

@@ -24,7 +24,7 @@ export const AndroidHomeScreenGuideModal: React.FC<AndroidHomeScreenGuideModalPr
   onClose,
   onOpenStandaloneWidget,
 }) => {
-  const [activeGuideTab, setActiveGuideTab] = useState<'shortcut' | 'pwa' | 'native'>('shortcut');
+  const [activeGuideTab, setActiveGuideTab] = useState<'native' | 'shortcut' | 'pwa'>('native');
   const [copiedLink, setCopiedLink] = useState(false);
 
   if (!isOpen) return null;
@@ -66,6 +66,17 @@ export const AndroidHomeScreenGuideModal: React.FC<AndroidHomeScreenGuideModalPr
         {/* Tab selector */}
         <div className="flex items-center gap-2 p-3 bg-slate-100 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800 text-xs">
           <button
+            onClick={() => setActiveGuideTab('native')}
+            className={`flex-1 py-2 px-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+              activeGuideTab === 'native'
+                ? 'bg-emerald-600 text-white shadow-sm'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            <Layers size={14} />
+            <span>App APK Instalado (Widgets)</span>
+          </button>
+          <button
             onClick={() => setActiveGuideTab('shortcut')}
             className={`flex-1 py-2 px-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeGuideTab === 'shortcut'
@@ -74,7 +85,7 @@ export const AndroidHomeScreenGuideModal: React.FC<AndroidHomeScreenGuideModalPr
             }`}
           >
             <Sparkles size={14} />
-            <span>Método 1: Atalho Rápido</span>
+            <span>Atalho Rápido (1 Toque)</span>
           </button>
           <button
             onClick={() => setActiveGuideTab('pwa')}
@@ -85,23 +96,66 @@ export const AndroidHomeScreenGuideModal: React.FC<AndroidHomeScreenGuideModalPr
             }`}
           >
             <Download size={14} />
-            <span>Método 2: Menu do Chrome</span>
-          </button>
-          <button
-            onClick={() => setActiveGuideTab('native')}
-            className={`flex-1 py-2 px-3 rounded-xl font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
-              activeGuideTab === 'native'
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-            }`}
-          >
-            <Layers size={14} />
-            <span>APK / Nativo</span>
+            <span>Navegador Web</span>
           </button>
         </div>
 
         {/* Body Guide */}
         <div className="p-5 flex-1 overflow-y-auto space-y-5 text-sm">
+          {activeGuideTab === 'native' && (
+            <div className="space-y-4">
+              <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800/60 text-xs text-emerald-900 dark:text-emerald-300 flex items-start gap-2.5">
+                <Layers className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong>Widget Nativo do APK Android:</strong> O KeepFlow possui o componente oficial <code>AppWidgetProvider</code> integrado no APK para adicionar direto no lançador do seu Android.
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-start gap-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/80">
+                  <div className="w-7 h-7 rounded-xl bg-emerald-600 text-white font-black text-xs flex items-center justify-center shrink-0">
+                    1
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 dark:text-white text-xs">
+                      Pressione um Espaço Vazio na Tela Inicial
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Vá para a tela inicial do seu celular e mantenha o dedo pressionado em qualquer área vazia por 2 segundos.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/80">
+                  <div className="w-7 h-7 rounded-xl bg-emerald-600 text-white font-black text-xs flex items-center justify-center shrink-0">
+                    2
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 dark:text-white text-xs">
+                      Toque no Menu "Widgets"
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      O Android exibirá as opções do inicializador. Toque no ícone ou botão <strong>"Widgets"</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700/80">
+                  <div className="w-7 h-7 rounded-xl bg-emerald-600 text-white font-black text-xs flex items-center justify-center shrink-0">
+                    3
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900 dark:text-white text-xs">
+                      Selecione "KeepFlow - Nota Rápida"
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Procure por <strong>KeepFlow</strong> na lista de aplicativos e arraste o widget <strong>"Nota Rápida"</strong> para onde desejar.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {activeGuideTab === 'shortcut' && (
             <div className="space-y-4">
               <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 dark:border-emerald-800/60 text-xs text-emerald-900 dark:text-emerald-300 flex items-start gap-2.5">
@@ -205,21 +259,6 @@ export const AndroidHomeScreenGuideModal: React.FC<AndroidHomeScreenGuideModalPr
                     </p>
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {activeGuideTab === 'native' && (
-            <div className="space-y-4">
-              <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-200 dark:border-amber-800/60 text-xs text-amber-900 dark:text-amber-300">
-                Para aplicativos empacotados em APK nativo ou compilados via Android Studio / Capacitor, o widget pode ser adicionado pelo menu de widgets do Android.
-              </div>
-
-              <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
-                <p>1. Pressione e segure qualquer espaço livre na tela inicial do celular.</p>
-                <p>2. Toque no botão <strong>"Widgets"</strong>.</p>
-                <p>3. Procure por <strong>KeepFlow</strong> na lista.</p>
-                <p>4. Escolha o tamanho do widget de notas (ex: 4x2 ou 2x2) e posicione na tela.</p>
               </div>
             </div>
           )}
