@@ -23,6 +23,13 @@ import {
   apiGetTrashItems,
   apiGetDocuments,
   apiGetMe,
+  apiGetActiveFastingSession,
+  apiGetFastingHistory,
+  apiStartFasting,
+  apiUpdateActiveFasting,
+  apiEndFasting,
+  apiCancelFasting,
+  apiDeleteFastingHistory,
   getServerUrl,
   isNativeApp,
 } from './lib/api';
@@ -45,6 +52,7 @@ import { AndroidAppView } from './components/AndroidAppView';
 import { WorkoutView } from './components/WorkoutView';
 import { VaultView } from './components/VaultView';
 import { FastingView } from './components/FastingView';
+import { TelemetryGpsView } from './components/TelemetryGpsView';
 import { FloatingFastingWidget } from './components/FloatingFastingWidget';
 import { ServerSettingsModal } from './components/ServerSettingsModal';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -58,6 +66,7 @@ import { TemplateSelectorModal } from './components/TemplateSelectorModal';
 import { BackupRestoreModal } from './components/BackupRestoreModal';
 import { NoteHistoryModal, NoteRevision } from './components/NoteHistoryModal';
 import { EditProfileModal } from './components/EditProfileModal';
+import { QuickNoteWidgetStandalone } from './components/QuickNoteWidgetStandalone';
 import {
   getStoredActiveSession,
   setStoredActiveSession,
@@ -76,6 +85,12 @@ export default function App() {
   });
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
+  // Quick Note Widget Standalone mode (Direct Android home screen shortcut / widget)
+  const [isStandaloneQuickNote, setIsStandaloneQuickNote] = useState<boolean>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('action') === 'quick_note' || params.get('widget') === 'quick_note' || window.location.hash === '#quick-note';
+  });
+
   // User Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
@@ -89,7 +104,7 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(() => {
     const token = localStorage.getItem('kb_auth_token');
     const params = new URLSearchParams(window.location.search);
-    if (params.get('shared_workout')) return false;
+    if (params.get('shared_workout') || params.get('wdata') || params.get('action') === 'quick_note' || params.get('widget') === 'quick_note') return false;
     // Only open auth modal if server url is already set (otherwise server modal is the first screen)
     return !token && Boolean(getServerUrl());
   });
@@ -150,7 +165,8 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (sharedWorkoutId) {
+    const params = new URLSearchParams(window.location.search);
+    if (sharedWorkoutId || params.get('wdata')) {
       setCurrentTab('workouts');
     }
   }, [sharedWorkoutId]);
@@ -185,7 +201,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleStartFasting = (targetHours: number, protocolName?: string, notes?: string) => {
+  const handleStartFasting = async (targetHours: number, protocolName?: string, notes?: string) => {
     const newSession: FastingSession = {
       id: String(Date.now()),
       target_hours: targetHours,
@@ -197,9 +213,25 @@ export default function App() {
     };
     setActiveFastingSession(newSession);
     setStoredActiveSession(newSession);
+
+    try {
+      const saved = await apiStartFasting({
+        target_hours: targetHours,
+        protocol_name: protocolName,
+        start_time: newSession.start_time,
+        water_ml: 0,
+        notes,
+      });
+      if (saved && saved.id) {
+        setActiveFastingSession(saved);
+        setStoredActiveSession(saved);
+      }
+    } catch (err) {
+      console.error('Erro ao iniciar jejum no servidor:', err);
+    }
   };
 
-  const handleEndFasting = () => {
+  const handleEndFasting = async () => {
     if (!activeFastingSession) return;
     const completedSession: FastingSession = {
       ...activeFastingSession,
@@ -209,45 +241,79 @@ export default function App() {
     const updatedHistory = [completedSession, ...fastingHistory];
     setFastingHistory(updatedHistory);
     setStoredFastingHistory(updatedHistory);
+    const prevId = activeFastingSession.id;
     setActiveFastingSession(null);
     setStoredActiveSession(null);
+
+    try {
+      await apiEndFasting(prevId);
+    } catch (err) {
+      console.error('Erro ao finalizar jejum no servidor:', err);
+    }
   };
 
-  const handleCancelFasting = () => {
+  const handleCancelFasting = async () => {
     setActiveFastingSession(null);
     setStoredActiveSession(null);
+
+    try {
+      await apiCancelFasting();
+    } catch (err) {
+      console.error('Erro ao cancelar jejum no servidor:', err);
+    }
   };
 
-  const handleAddFastingWater = (ml: number) => {
+  const handleAddFastingWater = async (ml: number) => {
     if (!activeFastingSession) return;
     const history = activeFastingSession.water_history || [];
     const currentTotal = activeFastingSession.water_ml || 0;
+    const newTotal = currentTotal + ml;
+    const newHistory = [...history, ml];
     const updated: FastingSession = {
       ...activeFastingSession,
-      water_ml: currentTotal + ml,
-      water_history: [...history, ml],
+      water_ml: newTotal,
+      water_history: newHistory,
     };
     setActiveFastingSession(updated);
     setStoredActiveSession(updated);
+
+    try {
+      await apiUpdateActiveFasting({
+        water_ml: newTotal,
+        water_history: newHistory,
+      });
+    } catch (err) {
+      console.error('Erro ao registrar água no servidor:', err);
+    }
   };
 
-  const handleUndoFastingWater = () => {
+  const handleUndoFastingWater = async () => {
     if (!activeFastingSession) return;
     const history = activeFastingSession.water_history || [];
     if (history.length === 0) return;
     const lastMl = history[history.length - 1];
     const newHistory = history.slice(0, history.length - 1);
     const currentTotal = activeFastingSession.water_ml || 0;
+    const newTotal = Math.max(0, currentTotal - lastMl);
     const updated: FastingSession = {
       ...activeFastingSession,
-      water_ml: Math.max(0, currentTotal - lastMl),
+      water_ml: newTotal,
       water_history: newHistory,
     };
     setActiveFastingSession(updated);
     setStoredActiveSession(updated);
+
+    try {
+      await apiUpdateActiveFasting({
+        water_ml: newTotal,
+        water_history: newHistory,
+      });
+    } catch (err) {
+      console.error('Erro ao desfazer água no servidor:', err);
+    }
   };
 
-  const handleUpdateWaterGoal = (goal: number) => {
+  const handleUpdateWaterGoal = async (goal: number) => {
     if (!activeFastingSession) return;
     const updated: FastingSession = {
       ...activeFastingSession,
@@ -255,12 +321,26 @@ export default function App() {
     };
     setActiveFastingSession(updated);
     setStoredActiveSession(updated);
+
+    try {
+      await apiUpdateActiveFasting({
+        water_goal: goal,
+      });
+    } catch (err) {
+      console.error('Erro ao atualizar meta de água no servidor:', err);
+    }
   };
 
-  const handleDeleteFastingSession = (id: string) => {
+  const handleDeleteFastingSession = async (id: string) => {
     const updated = fastingHistory.filter((s) => s.id !== id);
     setFastingHistory(updated);
     setStoredFastingHistory(updated);
+
+    try {
+      await apiDeleteFastingHistory(id);
+    } catch (err) {
+      console.error('Erro ao excluir histórico de jejum no servidor:', err);
+    }
   };
 
   const handleToggleFloatingWidget = (show: boolean) => {
@@ -354,24 +434,46 @@ export default function App() {
   const checkCurrentUser = async () => {
     const token = localStorage.getItem('kb_auth_token');
     const params = new URLSearchParams(window.location.search);
-    const hasSharedWorkout = !!params.get('shared_workout');
+    const hasSharedWorkout = !!(params.get('shared_workout') || params.get('wdata'));
+    const isWidgetAction = !!(params.get('action') === 'quick_note' || params.get('widget') === 'quick_note' || window.location.hash === '#quick-note');
+
     if (!token) {
       setCurrentUser(null);
-      if (!hasSharedWorkout) {
+      if (!hasSharedWorkout && !isWidgetAction) {
         setIsAuthModalOpen(true);
       }
       return;
     }
+
     try {
       const user = await apiGetMe();
       setCurrentUser(user);
       localStorage.setItem('kb_auth_user', JSON.stringify(user));
-    } catch (e) {
-      setCurrentUser(null);
-      localStorage.removeItem('kb_auth_token');
-      localStorage.removeItem('kb_auth_user');
-      if (!hasSharedWorkout) {
-        setIsAuthModalOpen(true);
+    } catch (e: any) {
+      console.warn('Verificação de autenticação:', e?.message || e);
+      // Permanent login: Only clear credentials if explicitly unauthenticated (401)
+      const errorMsg = String(e?.message || '');
+      const isExplicitAuthError =
+        e?.status === 401 ||
+        errorMsg.includes('Sessão expirada') ||
+        errorMsg.includes('Usuário não encontrado') ||
+        errorMsg.includes('401');
+
+      if (isExplicitAuthError) {
+        setCurrentUser(null);
+        localStorage.removeItem('kb_auth_token');
+        localStorage.removeItem('kb_auth_user');
+        if (!hasSharedWorkout && !isWidgetAction) {
+          setIsAuthModalOpen(true);
+        }
+      } else {
+        // Retain current session from cached user in localStorage
+        try {
+          const cachedUser = localStorage.getItem('kb_auth_user');
+          if (cachedUser) {
+            setCurrentUser(JSON.parse(cachedUser));
+          }
+        } catch {}
       }
     }
   };
@@ -387,12 +489,14 @@ export default function App() {
     }
 
     try {
-      const [lbls, nts, bds, trashed, docs] = await Promise.all([
+      const [lbls, nts, bds, trashed, docs, activeSess, fastingHist] = await Promise.all([
         apiGetLabels(),
         apiGetNotes(false, false),
         apiGetBoards(),
         apiGetTrashItems(),
         apiGetDocuments(),
+        apiGetActiveFastingSession().catch(() => null),
+        apiGetFastingHistory().catch(() => []),
       ]);
 
       setLabels(lbls);
@@ -400,6 +504,19 @@ export default function App() {
       setBoards(bds);
       setTrashCount((trashed.notes ? trashed.notes.length : 0) + (trashed.cards ? trashed.cards.length : 0));
       setPdfCount(docs ? docs.length : 0);
+
+      if (activeSess) {
+        setActiveFastingSession(activeSess);
+        setStoredActiveSession(activeSess);
+      } else {
+        setActiveFastingSession(null);
+        setStoredActiveSession(null);
+      }
+
+      if (Array.isArray(fastingHist)) {
+        setFastingHistory(fastingHist);
+        setStoredFastingHistory(fastingHist);
+      }
 
       // Load archived count
       const archivedNotes = await apiGetNotes(true, false);
@@ -556,6 +673,23 @@ export default function App() {
     setIsCardModalOpen(true);
   };
 
+  // If opened as Android Quick Note Widget (Standalone Home Screen Widget)
+  if (isStandaloneQuickNote) {
+    return (
+      <QuickNoteWidgetStandalone
+        currentUser={currentUser}
+        onOpenFullApp={() => {
+          const url = new URL(window.location.href);
+          url.searchParams.delete('action');
+          url.searchParams.delete('widget');
+          window.history.replaceState({}, '', url.pathname + (url.search ? url.search : ''));
+          setIsStandaloneQuickNote(false);
+        }}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors">
       {/* Top Navigation Bar */}
@@ -601,6 +735,11 @@ export default function App() {
           currentUser={currentUser}
           onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
           onOpenEditProfile={() => setIsEditProfileOpen(true)}
+          onOpenPomodoro={() => setIsPomodoroOpen(true)}
+          onOpenTemplates={() => setIsTemplatesOpen(true)}
+          onOpenBackup={() => setIsBackupOpen(true)}
+          darkMode={darkMode}
+          onToggleDarkMode={() => setDarkMode(!darkMode)}
         />
 
         {/* Main Content Area */}
@@ -653,6 +792,7 @@ export default function App() {
               onEndFasting={handleEndFasting}
               onAddWater={handleAddFastingWater}
               onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
+              onOpenStandaloneWidget={() => setIsStandaloneQuickNote(true)}
             />
           )}
 
@@ -672,6 +812,10 @@ export default function App() {
               showFloatingWidget={showFloatingWidget}
               onToggleFloatingWidget={handleToggleFloatingWidget}
             />
+          )}
+
+          {currentTab === 'telemetry' && (
+            <TelemetryGpsView onOpenAndroidApp={() => setCurrentTab('android')} />
           )}
 
           {currentTab === 'dashboard' && (
@@ -707,6 +851,7 @@ export default function App() {
               onOpenAuth={() => setIsAuthModalOpen(true)}
               onOpenServerSettings={() => setIsServerModalOpen(true)}
               onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
+              onOpenStandaloneWidget={() => setIsStandaloneQuickNote(true)}
             />
           )}
 

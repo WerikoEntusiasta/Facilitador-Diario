@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Flame, X, Volume2, Droplets, CheckCircle2, Square, Clock, Dumbbell } from 'lucide-react';
+import { Flame, X, Volume2, Droplets, CheckCircle2, Square, Clock, Dumbbell, Target } from 'lucide-react';
 import { FastingSession } from '../types';
 import { playFastingCompletionSound } from '../lib/fastingSound';
+import { calculateFastingEnd } from '../lib/fastingUtils';
 import { apiGetWorkouts } from '../lib/api';
 
 interface FloatingFastingWidgetProps {
@@ -43,6 +44,8 @@ export const FloatingFastingWidget: React.FC<FloatingFastingWidgetProps> = ({
   const targetSeconds = activeSession.target_hours * 3600;
   const remainingSeconds = Math.max(0, targetSeconds - elapsedSeconds);
   const progressPercent = Math.min(100, (elapsedSeconds / targetSeconds) * 100);
+
+  const endEstimate = calculateFastingEnd(activeSession.start_time, activeSession.target_hours);
 
   const [todayWorkout, setTodayWorkout] = useState<{
     routineTitle: string;
@@ -140,6 +143,17 @@ export const FloatingFastingWidget: React.FC<FloatingFastingWidgetProps> = ({
           </svg>
           <Flame className="w-4 h-4 text-amber-400 absolute" />
         </div>
+      </div>
+
+      {/* End Time Preview Badge */}
+      <div className="mb-3 px-2.5 py-1.5 bg-amber-500/10 rounded-xl border border-amber-500/20 flex items-center justify-between text-[11px]">
+        <span className="text-amber-300 font-semibold flex items-center gap-1">
+          <Target className="w-3 h-3 text-amber-400" />
+          Término Previsto:
+        </span>
+        <span className="font-bold text-amber-200">
+          {endEstimate.dayLabel} às {endEstimate.timeStr}
+        </span>
       </div>
 
       {/* Quick Actions */}

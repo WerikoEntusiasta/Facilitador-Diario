@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { Note, KanbanBoard } from '../types';
+import { Note, KanbanBoard, WorkoutRoutine } from '../types';
 import { apiSaveGeneratedPdf } from './api';
 
 /**
@@ -264,3 +264,179 @@ export async function exportBoardToPdf(board: KanbanBoard, saveToCentral = true)
     }
   }
 }
+
+/**
+ * Generates a formatted, complete PDF report for a Workout Routine (Ficha de Treino Semanal)
+ */
+export async function exportWorkoutToPdf(workout: WorkoutRoutine, saveToCentral = true): Promise<void> {
+  const doc = new jsPDF({
+    orientation: 'p',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  let y = 20;
+
+  // Header Banner - Emerald Theme
+  doc.setFillColor(16, 185, 129); // Emerald 500
+  doc.rect(0, 0, pageWidth, 16, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('KeepFlow Academia - Ficha de Treino Semanal', 15, 10.5);
+  doc.setFont('helvetica', 'normal');
+  doc.text(new Date().toLocaleDateString('pt-BR'), pageWidth - 15, 10.5, { align: 'right' });
+
+  // Routine Title
+  y += 10;
+  doc.setTextColor(15, 23, 42); // Slate 900
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  const splitTitle = doc.splitTextToSize(workout.title || 'Ficha de Treino', pageWidth - 30);
+  doc.text(splitTitle, 15, y);
+  y += splitTitle.length * 7 + 3;
+
+  // Description / Subtitle
+  if (workout.description && workout.description.trim()) {
+    doc.setFontSize(9.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139); // Slate 500
+    const splitDesc = doc.splitTextToSize(workout.description, pageWidth - 30);
+    doc.text(splitDesc, 15, y);
+    y += splitDesc.length * 5 + 3;
+  }
+
+  // Divider Line
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.5);
+  doc.line(15, y, pageWidth - 15, y);
+  y += 8;
+
+  // Iterate over each workout day
+  if (!workout.days || workout.days.length === 0) {
+    doc.setFontSize(11);
+    doc.setTextColor(148, 163, 184);
+    doc.text('Nenhum dia de treino cadastrado nesta ficha.', 15, y);
+  } else {
+    for (const day of workout.days) {
+      // Check if we need a new page for the day header
+      if (y > pageHeight - 40) {
+        doc.addPage();
+        y = 20;
+      }
+
+      // Day Box Header
+      doc.setFillColor(240, 253, 244); // Emerald 50
+      doc.setDrawColor(187, 247, 208); // Emerald 200
+      doc.roundedRect(15, y, pageWidth - 30, 8, 2, 2, 'FD');
+
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(6, 95, 70); // Emerald 800
+
+      const subtitleText = day.subtitle ? ` - ${day.subtitle}` : '';
+      const restText = day.is_rest_day ? ' [Descanso / Rest Day]' : '';
+      doc.text(`${day.day_name}${subtitleText}${restText}`, 18, y + 5.5);
+      y += 12;
+
+      if (day.is_rest_day) {
+        doc.setFontSize(9.5);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(100, 116, 139);
+        doc.text('  Dia dedicado para regeneração muscular, mobilidade e descanso.', 18, y);
+        y += 8;
+      } else if (!day.exercises || day.exercises.length === 0) {
+        doc.setFontSize(9.5);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(148, 163, 184);
+        doc.text('  Nenhum exercício cadastrado para este dia.', 18, y);
+        y += 8;
+      } else {
+        for (let i = 0; i < day.exercises.length; i++) {
+          const ex = day.exercises[i];
+
+          // Check if we need a page break for the exercise item
+          if (y > pageHeight - 35) {
+            doc.addPage();
+            y = 20;
+          }
+
+          // Exercise Card Container
+          doc.setDrawColor(226, 232, 240);
+          doc.setFillColor(255, 255, 255);
+          
+          // Exercise Name
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(15, 23, 42);
+          doc.text(`${i + 1}. ${ex.name}`, 18, y);
+          y += 4.5;
+
+          // Sets, Reps, Weight
+          doc.setFontSize(9);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(71, 85, 105);
+
+          let paramsLine = `Séries: ${ex.sets || '4'} | Repetições: ${ex.reps || '10-12'}`;
+          if (ex.weight && ex.weight.trim()) {
+            paramsLine += ` | Carga: ${ex.weight}`;
+          }
+          doc.text(paramsLine, 22, y);
+          y += 4.5;
+
+          // Notes / Tips
+          if (ex.notes && ex.notes.trim()) {
+            doc.setFontSize(8.5);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(100, 116, 139);
+            const splitNotes = doc.splitTextToSize(`Obs: ${ex.notes}`, pageWidth - 45);
+            doc.text(splitNotes, 22, y);
+            y += splitNotes.length * 4;
+          }
+
+          y += 3;
+        }
+      }
+
+      y += 4;
+    }
+  }
+
+  // Footer on all pages
+  const totalPages = (doc as any).internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(148, 163, 184);
+    doc.text(
+      `KeepFlow Treinos • Ficha gerada para impressão e consulta • Página ${i} de ${totalPages}`,
+      pageWidth / 2,
+      pageHeight - 8,
+      { align: 'center' }
+    );
+  }
+
+  // Download locally
+  const safeFilename = (workout.title || 'treino')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '_') + '_ficha.pdf';
+
+  doc.save(safeFilename);
+
+  // Save to backend Document Center
+  if (saveToCentral) {
+    try {
+      const base64Pdf = doc.output('datauristring');
+      await apiSaveGeneratedPdf(`Ficha de Treino - ${workout.title}`, base64Pdf, 'workout_export');
+    } catch (err) {
+      console.error('Erro ao salvar ficha de treino em PDF no servidor:', err);
+    }
+  }
+}
+

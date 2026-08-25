@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
-import { queryAll, queryOne, runQuery, saveDatabase } from './db';
+import { queryAll, queryOne, runQuery, saveDatabase, generateWorkoutShareCode } from './db';
 
 const router = Router();
 const uploadsDir = path.join(process.cwd(), 'uploads');
@@ -114,9 +114,8 @@ function getUserIdFromReq(req: any): number {
       const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(payload).digest('hex').substring(0, 16);
 
       if (sig.length === expectedSig.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) {
-        const tsNum = parseInt(timestamp, 10);
-        const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
-        if (!isNaN(uid) && uid > 0 && !isNaN(tsNum) && (Date.now() - tsNum < THIRTY_DAYS)) {
+        // Permanent login: Check if user ID is valid and exists in DB
+        if (!isNaN(uid) && uid > 0) {
           return uid;
         }
       }
@@ -1329,15 +1328,23 @@ router.get('/workouts', (req, res) => {
   try {
     const userId = getUserIdFromReq(req);
     const rows = queryAll('SELECT * FROM workouts WHERE user_id = ? ORDER BY id DESC', [userId]);
-    const workouts = rows.map((r) => ({
-      id: r.id,
-      user_id: r.user_id,
-      title: r.title,
-      description: r.description,
-      days: JSON.parse(r.days_json || '[]'),
-      created_at: r.created_at,
-      updated_at: r.updated_at,
-    }));
+    const workouts = rows.map((r) => {
+      let code = r.share_code;
+      if (!code) {
+        code = generateWorkoutShareCode();
+        runQuery('UPDATE workouts SET share_code = ? WHERE id = ?', [code, r.id]);
+      }
+      return {
+        id: r.id,
+        user_id: r.user_id,
+        title: r.title,
+        description: r.description,
+        share_code: code,
+        days: JSON.parse(r.days_json || '[]'),
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+      };
+    });
     res.json(workouts);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -1352,11 +1359,17 @@ router.get('/workouts/:id', (req, res) => {
     if (!r) {
       return res.status(404).json({ error: 'Treino não encontrado' });
     }
+    let code = r.share_code;
+    if (!code) {
+      code = generateWorkoutShareCode();
+      runQuery('UPDATE workouts SET share_code = ? WHERE id = ?', [code, r.id]);
+    }
     res.json({
       id: r.id,
       user_id: r.user_id,
       title: r.title,
       description: r.description,
+      share_code: code,
       days: JSON.parse(r.days_json || '[]'),
       created_at: r.created_at,
       updated_at: r.updated_at,
@@ -1374,9 +1387,10 @@ router.post('/workouts', (req, res) => {
       return res.status(400).json({ error: 'Título é obrigatório' });
     }
     const daysJson = JSON.stringify(days || []);
+    const shareCode = generateWorkoutShareCode();
     const result = runQuery(
-      'INSERT INTO workouts (user_id, title, description, days_json) VALUES (?, ?, ?, ?)',
-      [userId, title.trim(), description || '', daysJson]
+      'INSERT INTO workouts (user_id, title, description, days_json, share_code) VALUES (?, ?, ?, ?, ?)',
+      [userId, title.trim(), description || '', daysJson, shareCode]
     );
     const created = queryOne('SELECT * FROM workouts WHERE id = ?', [result.lastInsertRowid]);
     res.json({
@@ -1384,6 +1398,7 @@ router.post('/workouts', (req, res) => {
       user_id: created.user_id,
       title: created.title,
       description: created.description,
+      share_code: created.share_code || shareCode,
       days: JSON.parse(created.days_json || '[]'),
       created_at: created.created_at,
       updated_at: created.updated_at,
@@ -1419,6 +1434,7 @@ router.put('/workouts/:id', (req, res) => {
       user_id: updated.user_id,
       title: updated.title,
       description: updated.description,
+      share_code: updated.share_code || existing.share_code,
       days: JSON.parse(updated.days_json || '[]'),
       created_at: updated.created_at,
       updated_at: updated.updated_at,
@@ -1443,7 +1459,141 @@ router.delete('/workouts/:id', (req, res) => {
   }
 });
 
-// Public shared workout endpoint
+// Lookup workout details by share_code or ID (Public / authenticated)
+router.get('/workouts/code/:code', (req, res) => {
+  try {
+    const rawCode = (req.params.code || '').trim();
+    if (!rawCode) {
+      return res.status(400).json({ error: 'Código de treino é obrigatório' });
+    }
+
+    // Clean formatting e.g. "TRN-8A9K2" or "8A9K2"
+    let cleanCode = rawCode.toUpperCase();
+    if (!cleanCode.startsWith('TRN-') && !cleanCode.startsWith('KF-') && cleanCode.length <= 6 && !cleanCode.match(/^\d+$/)) {
+      cleanCode = `TRN-${cleanCode}`;
+    }
+
+    // Try finding by exact/prefix code, or numeric ID
+    let r = queryOne(
+      'SELECT w.*, u.name as author_name, u.avatar as author_avatar FROM workouts w LEFT JOIN users u ON w.user_id = u.id WHERE UPPER(w.share_code) = ? OR UPPER(w.share_code) = ?',
+      [cleanCode, rawCode.toUpperCase()]
+    );
+
+    if (!r && /^\d+$/.test(rawCode)) {
+      r = queryOne(
+        'SELECT w.*, u.name as author_name, u.avatar as author_avatar FROM workouts w LEFT JOIN users u ON w.user_id = u.id WHERE w.id = ?',
+        [Number(rawCode)]
+      );
+    }
+
+    if (!r) {
+      return res.status(404).json({ error: `Nenhum treino encontrado com o código "${rawCode}". Verifique se o código está correto.` });
+    }
+
+    const days = JSON.parse(r.days_json || '[]');
+    let totalExercises = 0;
+    if (Array.isArray(days)) {
+      for (const d of days) {
+        if (d.exercises && Array.isArray(d.exercises)) {
+          totalExercises += d.exercises.length;
+        }
+      }
+    }
+
+    res.json({
+      id: r.id,
+      title: r.title,
+      description: r.description,
+      share_code: r.share_code || cleanCode,
+      author_name: r.author_name || 'Colega de Treino',
+      author_avatar: r.author_avatar || '',
+      days,
+      total_exercises: totalExercises,
+      created_at: r.created_at,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Import / Copy a workout from another user (User A) to the current user (User B) via code
+router.post('/workouts/import-code', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const { code } = req.body;
+
+    if (!code || typeof code !== 'string' || !code.trim()) {
+      return res.status(400).json({ error: 'Informe o código do treino para importar' });
+    }
+
+    const rawCode = code.trim();
+    let cleanCode = rawCode.toUpperCase();
+    if (!cleanCode.startsWith('TRN-') && !cleanCode.startsWith('KF-') && cleanCode.length <= 6 && !cleanCode.match(/^\d+$/)) {
+      cleanCode = `TRN-${cleanCode}`;
+    }
+
+    let source = queryOne(
+      'SELECT w.*, u.name as author_name FROM workouts w LEFT JOIN users u ON w.user_id = u.id WHERE UPPER(w.share_code) = ? OR UPPER(w.share_code) = ?',
+      [cleanCode, rawCode.toUpperCase()]
+    );
+
+    if (!source && /^\d+$/.test(rawCode)) {
+      source = queryOne(
+        'SELECT w.*, u.name as author_name FROM workouts w LEFT JOIN users u ON w.user_id = u.id WHERE w.id = ?',
+        [Number(rawCode)]
+      );
+    }
+
+    if (!source) {
+      return res.status(404).json({ error: `Nenhum treino encontrado com o código "${rawCode}". Verifique o código com o colega.` });
+    }
+
+    // Parse days and reset completed checkmarks for User B's fresh routine
+    const sourceDays = JSON.parse(source.days_json || '[]');
+    const freshDays = sourceDays.map((d: any) => ({
+      ...d,
+      exercises: (d.exercises || []).map((ex: any) => ({
+        ...ex,
+        completed: false,
+      })),
+    }));
+
+    // New unique share code for this user's cloned workout
+    const newShareCode = generateWorkoutShareCode();
+    const importTitle = source.title;
+
+    const result = runQuery(
+      'INSERT INTO workouts (user_id, title, description, days_json, share_code) VALUES (?, ?, ?, ?, ?)',
+      [
+        userId,
+        importTitle,
+        source.description ? `${source.description} (Importado via código ${source.share_code || cleanCode})` : `Importado de ${source.author_name || 'Colega'} via código ${source.share_code || cleanCode}`,
+        JSON.stringify(freshDays),
+        newShareCode,
+      ]
+    );
+
+    const created = queryOne('SELECT * FROM workouts WHERE id = ?', [result.lastInsertRowid]);
+    res.json({
+      success: true,
+      message: `Treino "${source.title}" copiado com sucesso para sua conta!`,
+      workout: {
+        id: created.id,
+        user_id: created.user_id,
+        title: created.title,
+        description: created.description,
+        share_code: created.share_code || newShareCode,
+        days: JSON.parse(created.days_json || '[]'),
+        created_at: created.created_at,
+        updated_at: created.updated_at,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Public shared workout endpoint (backward compatibility)
 router.get('/workouts/shared/:id', (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -1455,6 +1605,7 @@ router.get('/workouts/shared/:id', (req, res) => {
       id: r.id,
       title: r.title,
       description: r.description,
+      share_code: r.share_code || `TRN-${r.id}`,
       author_name: r.author_name || 'Usuário KeepFlow',
       days: JSON.parse(r.days_json || '[]'),
       created_at: r.created_at,
@@ -1704,6 +1855,69 @@ router.delete('/vault/items/:id', (req, res) => {
 
 const SERVER_BOOT_TIME = Date.now();
 
+/* =========================================================================
+   LOCAL EXERCISES API (BodyIQDB / Dataset local server delivery)
+   ========================================================================= */
+
+let cachedExercises: any[] | null = null;
+
+function getLocalExercises(): any[] {
+  if (cachedExercises && cachedExercises.length > 0) return cachedExercises;
+  const filePath = path.join(process.cwd(), 'server', 'data', 'exercises.json');
+  const pubPath = path.join(process.cwd(), 'public', 'data', 'exercises.json');
+  const target = fs.existsSync(filePath) ? filePath : pubPath;
+  if (fs.existsSync(target)) {
+    try {
+      cachedExercises = JSON.parse(fs.readFileSync(target, 'utf-8'));
+      return cachedExercises || [];
+    } catch (e) {
+      console.error('Error reading local exercises database:', e);
+    }
+  }
+  return [];
+}
+
+router.get('/exercises', (req, res) => {
+  try {
+    const list = getLocalExercises();
+    const { bodyPart, equipment, search, limit = '300', offset = '0' } = req.query;
+
+    let filtered = list;
+    if (bodyPart && bodyPart !== 'all') {
+      filtered = filtered.filter(
+        (ex: any) => ex.bodyPart?.toLowerCase() === String(bodyPart).toLowerCase()
+      );
+    }
+    if (equipment && equipment !== 'all') {
+      filtered = filtered.filter(
+        (ex: any) => ex.equipment?.toLowerCase() === String(equipment).toLowerCase()
+      );
+    }
+    if (search) {
+      const q = String(search).toLowerCase();
+      filtered = filtered.filter(
+        (ex: any) =>
+          ex.name?.toLowerCase().includes(q) ||
+          ex.target?.toLowerCase().includes(q) ||
+          ex.bodyPart?.toLowerCase().includes(q)
+      );
+    }
+
+    const lim = Math.min(parseInt(String(limit), 10) || 300, 2000);
+    const off = parseInt(String(offset), 10) || 0;
+    const paginated = filtered.slice(off, off + lim);
+
+    res.json({
+      total: filtered.length,
+      limit: lim,
+      offset: off,
+      exercises: paginated,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Erro ao carregar exercícios locais' });
+  }
+});
+
 router.get('/version', (req, res) => {
   res.json({
     version: '1.0.0',
@@ -1731,6 +1945,357 @@ router.get('/android/build-info', (req, res) => {
     syncServerUrl: req.protocol + '://' + req.get('host'),
     downloadInstructions: 'https://bubblewrap.dev / Capacitor CLI / Google Chrome Android WebAPK',
   });
+});
+
+/* =========================================================================
+   FASTING (JEJUM INTERMITENTE) API (PERSISTED ACROSS WEB & APP)
+   ========================================================================= */
+
+router.get('/fasting/active', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const r = queryOne(
+      'SELECT * FROM fasting_sessions WHERE user_id = ? AND status = "active" ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
+    if (!r) {
+      return res.json({ session: null });
+    }
+    res.json({
+      session: {
+        id: r.id,
+        user_id: r.user_id,
+        target_hours: Number(r.target_hours) || 16,
+        start_time: r.start_time,
+        end_time: r.end_time || null,
+        status: r.status,
+        protocol_name: r.protocol_name || '',
+        notes: r.notes || '',
+        water_ml: Number(r.water_ml) || 0,
+        water_goal: Number(r.water_goal) || 2000,
+        water_history: JSON.parse(r.water_history || '[]'),
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/fasting/history', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const rows = queryAll(
+      'SELECT * FROM fasting_sessions WHERE user_id = ? AND status != "active" ORDER BY start_time DESC',
+      [userId]
+    );
+    const sessions = rows.map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      target_hours: Number(r.target_hours) || 16,
+      start_time: r.start_time,
+      end_time: r.end_time || null,
+      status: r.status,
+      protocol_name: r.protocol_name || '',
+      notes: r.notes || '',
+      water_ml: Number(r.water_ml) || 0,
+      water_goal: Number(r.water_goal) || 2000,
+      water_history: JSON.parse(r.water_history || '[]'),
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    }));
+    res.json(sessions);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/fasting/start', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const { id, target_hours, start_time, protocol_name, notes, water_ml, water_goal, water_history } = req.body;
+
+    const sessionId = id || `fast_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    const startTimeStr = start_time || new Date().toISOString();
+    const targetHoursNum = Number(target_hours) || 16;
+    const protocolStr = protocol_name || `${targetHoursNum}h Protocolo`;
+    const waterHistoryStr = JSON.stringify(water_history || []);
+
+    // Archive any old active session
+    runQuery(
+      'UPDATE fasting_sessions SET status = "cancelled", end_time = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND status = "active"',
+      [userId]
+    );
+
+    // Insert new active session
+    runQuery(
+      `INSERT INTO fasting_sessions (id, user_id, target_hours, start_time, status, protocol_name, notes, water_ml, water_goal, water_history)
+       VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
+      [
+        sessionId,
+        userId,
+        targetHoursNum,
+        startTimeStr,
+        protocolStr,
+        notes || '',
+        Number(water_ml) || 0,
+        Number(water_goal) || 2000,
+        waterHistoryStr,
+      ]
+    );
+
+    const created = queryOne('SELECT * FROM fasting_sessions WHERE id = ?', [sessionId]);
+    res.json({
+      session: {
+        id: created.id,
+        user_id: created.user_id,
+        target_hours: Number(created.target_hours) || 16,
+        start_time: created.start_time,
+        end_time: created.end_time || null,
+        status: created.status,
+        protocol_name: created.protocol_name || '',
+        notes: created.notes || '',
+        water_ml: Number(created.water_ml) || 0,
+        water_goal: Number(created.water_goal) || 2000,
+        water_history: JSON.parse(created.water_history || '[]'),
+        created_at: created.created_at,
+        updated_at: created.updated_at,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.put('/fasting/active', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const active = queryOne(
+      'SELECT * FROM fasting_sessions WHERE user_id = ? AND status = "active" ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
+    if (!active) {
+      return res.status(404).json({ error: 'Nenhuma sessão ativa encontrada' });
+    }
+
+    const { target_hours, notes, water_ml, water_history, water_goal, protocol_name } = req.body;
+    const updatedTarget = target_hours !== undefined ? Number(target_hours) : active.target_hours;
+    const updatedNotes = notes !== undefined ? String(notes) : active.notes;
+    const updatedWaterMl = water_ml !== undefined ? Number(water_ml) : active.water_ml;
+    const updatedWaterGoal = water_goal !== undefined ? Number(water_goal) : active.water_goal;
+    const updatedWaterHistory = water_history !== undefined ? JSON.stringify(water_history) : active.water_history;
+    const updatedProtocol = protocol_name !== undefined ? String(protocol_name) : active.protocol_name;
+
+    runQuery(
+      `UPDATE fasting_sessions SET target_hours = ?, notes = ?, water_ml = ?, water_goal = ?, water_history = ?, protocol_name = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND user_id = ?`,
+      [updatedTarget, updatedNotes, updatedWaterMl, updatedWaterGoal, updatedWaterHistory, updatedProtocol, active.id, userId]
+    );
+
+    const updated = queryOne('SELECT * FROM fasting_sessions WHERE id = ?', [active.id]);
+    res.json({
+      session: {
+        id: updated.id,
+        user_id: updated.user_id,
+        target_hours: Number(updated.target_hours) || 16,
+        start_time: updated.start_time,
+        end_time: updated.end_time || null,
+        status: updated.status,
+        protocol_name: updated.protocol_name || '',
+        notes: updated.notes || '',
+        water_ml: Number(updated.water_ml) || 0,
+        water_goal: Number(updated.water_goal) || 2000,
+        water_history: JSON.parse(updated.water_history || '[]'),
+        created_at: updated.created_at,
+        updated_at: updated.updated_at,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/fasting/end', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const { end_time, notes, water_ml } = req.body;
+    const active = queryOne(
+      'SELECT * FROM fasting_sessions WHERE user_id = ? AND status = "active" ORDER BY created_at DESC LIMIT 1',
+      [userId]
+    );
+    if (!active) {
+      return res.status(404).json({ error: 'Nenhuma sessão ativa para finalizar' });
+    }
+
+    const endTimeStr = end_time || new Date().toISOString();
+    const finalNotes = notes !== undefined ? String(notes) : active.notes;
+    const finalWater = water_ml !== undefined ? Number(water_ml) : active.water_ml;
+
+    runQuery(
+      `UPDATE fasting_sessions SET status = "completed", end_time = ?, notes = ?, water_ml = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND user_id = ?`,
+      [endTimeStr, finalNotes, finalWater, active.id, userId]
+    );
+
+    const completed = queryOne('SELECT * FROM fasting_sessions WHERE id = ?', [active.id]);
+    res.json({
+      session: {
+        id: completed.id,
+        user_id: completed.user_id,
+        target_hours: Number(completed.target_hours) || 16,
+        start_time: completed.start_time,
+        end_time: completed.end_time,
+        status: completed.status,
+        protocol_name: completed.protocol_name || '',
+        notes: completed.notes || '',
+        water_ml: Number(completed.water_ml) || 0,
+        water_goal: Number(completed.water_goal) || 2000,
+        water_history: JSON.parse(completed.water_history || '[]'),
+        created_at: completed.created_at,
+        updated_at: completed.updated_at,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/fasting/cancel', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    runQuery(
+      'UPDATE fasting_sessions SET status = "cancelled", end_time = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND status = "active"',
+      [userId]
+    );
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/fasting/history/:id', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const id = req.params.id;
+    runQuery('DELETE FROM fasting_sessions WHERE id = ? AND user_id = ?', [id, userId]);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* =========================================================================
+   GPS ACTIVITIES & TELEMETRY API (TEST / BETA)
+   ========================================================================= */
+
+router.get('/gps-activities', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const rows = queryAll(
+      'SELECT * FROM gps_activities WHERE user_id = ? ORDER BY date DESC, created_at DESC',
+      [userId]
+    );
+    const activities = rows.map((r) => ({
+      id: r.id,
+      user_id: r.user_id,
+      activity_type: r.activity_type || 'caminhada',
+      title: r.title || 'Atividade GPS',
+      date: r.date,
+      total_steps: Number(r.total_steps) || 0,
+      total_calories: Number(r.total_calories) || 0,
+      total_distance_km: Number(r.total_distance_km) || 0,
+      duration_seconds: Number(r.duration_seconds) || 0,
+      avg_speed_kmh: Number(r.avg_speed_kmh) || 0,
+      max_speed_kmh: Number(r.max_speed_kmh) || 0,
+      avg_pace_min_km: Number(r.avg_pace_min_km) || 0,
+      route_points: JSON.parse(r.route_points_json || '[]'),
+      notes: r.notes || '',
+      created_at: r.created_at,
+    }));
+    res.json(activities);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/gps-activities', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const {
+      id,
+      activity_type,
+      title,
+      date,
+      total_steps,
+      total_calories,
+      total_distance_km,
+      duration_seconds,
+      avg_speed_kmh,
+      max_speed_kmh,
+      avg_pace_min_km,
+      route_points,
+      notes,
+    } = req.body;
+
+    const activityId = id || `act_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+    const actDate = date || new Date().toISOString();
+    const actTitle = title || `Atividade GPS (${new Date(actDate).toLocaleDateString('pt-BR')})`;
+    const pointsJson = JSON.stringify(route_points || []);
+
+    runQuery(
+      `INSERT INTO gps_activities (id, user_id, activity_type, title, date, total_steps, total_calories, total_distance_km, duration_seconds, avg_speed_kmh, max_speed_kmh, avg_pace_min_km, route_points_json, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        activityId,
+        userId,
+        activity_type || 'caminhada',
+        actTitle,
+        actDate,
+        Number(total_steps) || 0,
+        Number(total_calories) || 0,
+        Number(total_distance_km) || 0,
+        Number(duration_seconds) || 0,
+        Number(avg_speed_kmh) || 0,
+        Number(max_speed_kmh) || 0,
+        Number(avg_pace_min_km) || 0,
+        pointsJson,
+        notes || '',
+      ]
+    );
+
+    const created = queryOne('SELECT * FROM gps_activities WHERE id = ?', [activityId]);
+    res.json({
+      id: created.id,
+      user_id: created.user_id,
+      activity_type: created.activity_type,
+      title: created.title,
+      date: created.date,
+      total_steps: Number(created.total_steps) || 0,
+      total_calories: Number(created.total_calories) || 0,
+      total_distance_km: Number(created.total_distance_km) || 0,
+      duration_seconds: Number(created.duration_seconds) || 0,
+      avg_speed_kmh: Number(created.avg_speed_kmh) || 0,
+      max_speed_kmh: Number(created.max_speed_kmh) || 0,
+      avg_pace_min_km: Number(created.avg_pace_min_km) || 0,
+      route_points: JSON.parse(created.route_points_json || '[]'),
+      notes: created.notes || '',
+      created_at: created.created_at,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/gps-activities/:id', (req, res) => {
+  try {
+    const userId = getUserIdFromReq(req);
+    const id = req.params.id;
+    runQuery('DELETE FROM gps_activities WHERE id = ? AND user_id = ?', [id, userId]);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

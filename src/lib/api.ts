@@ -12,6 +12,8 @@ import {
   AuthResponse,
   WorkoutRoutine,
   VaultItem,
+  FastingSession,
+  GpsActivityRecord,
 } from '../types';
 import { saveCache, getCache, enqueueSyncAction } from './offlineSync';
 
@@ -164,7 +166,9 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ error: 'Erro de comunicação com o servidor' }));
-    throw new Error(errorData.error || `Erro HTTP ${res.status}`);
+    const err: any = new Error(errorData.error || `Erro HTTP ${res.status}`);
+    err.status = res.status;
+    throw err;
   }
 
   return res.json();
@@ -583,7 +587,7 @@ export const apiUploadDocument = async (file: File): Promise<PdfDocument> => {
   return res.json();
 };
 
-export const apiSaveGeneratedPdf = (title: string, base64Data: string, sourceType: 'note_export' | 'kanban_export') =>
+export const apiSaveGeneratedPdf = (title: string, base64Data: string, sourceType: 'note_export' | 'kanban_export' | 'workout_export') =>
   request<PdfDocument>('/documents/save-generated', {
     method: 'POST',
     body: JSON.stringify({ title, base64Data, sourceType }),
@@ -627,6 +631,17 @@ export const apiGetWorkouts = async (): Promise<WorkoutRoutine[]> => {
 };
 
 export const apiGetSharedWorkout = (id: number) => request<WorkoutRoutine & { author_name?: string }>(`/workouts/shared/${id}`);
+
+export const apiGetWorkoutByCode = (code: string) =>
+  request<WorkoutRoutine & { author_name?: string; author_avatar?: string; total_exercises?: number }>(
+    `/workouts/code/${encodeURIComponent(code)}`
+  );
+
+export const apiImportWorkoutByCode = (code: string) =>
+  request<{ success: boolean; message: string; workout: WorkoutRoutine }>('/workouts/import-code', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
 
 export const apiCreateWorkout = async (data: Partial<WorkoutRoutine>): Promise<WorkoutRoutine> => {
   try {
@@ -718,4 +733,80 @@ export const apiDeleteVaultItem = (masterPassword: string, id: number) =>
     method: 'DELETE',
     headers: { 'X-Vault-Password': masterPassword },
   });
+
+// ============================================================================
+// FASTING (JEJUM) API
+// ============================================================================
+export const apiGetActiveFastingSession = async (): Promise<FastingSession | null> => {
+  try {
+    const res = await request<{ session: FastingSession | null }>('/fasting/active');
+    return res?.session || null;
+  } catch (err) {
+    return null;
+  }
+};
+
+export const apiGetFastingHistory = async (): Promise<FastingSession[]> => {
+  try {
+    const res = await request<FastingSession[]>('/fasting/history');
+    return Array.isArray(res) ? res : [];
+  } catch (err) {
+    return [];
+  }
+};
+
+export const apiStartFasting = async (session: Partial<FastingSession>): Promise<FastingSession | null> => {
+  const res = await request<{ session: FastingSession }>('/fasting/start', {
+    method: 'POST',
+    body: JSON.stringify(session),
+  });
+  return res?.session || null;
+};
+
+export const apiUpdateActiveFasting = async (session: Partial<FastingSession>): Promise<FastingSession | null> => {
+  const res = await request<{ session: FastingSession }>('/fasting/active', {
+    method: 'PUT',
+    body: JSON.stringify(session),
+  });
+  return res?.session || null;
+};
+
+export const apiEndFasting = async (sessionOrId?: string | { end_time?: string; notes?: string; water_ml?: number }): Promise<FastingSession | null> => {
+  const body = typeof sessionOrId === 'object' ? sessionOrId : {};
+  const res = await request<{ session: FastingSession }>('/fasting/end', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  return res?.session || null;
+};
+
+export const apiCancelFasting = () =>
+  request<{ success: boolean }>('/fasting/cancel', {
+    method: 'POST',
+  });
+
+export const apiDeleteFastingSession = (id: string) =>
+  request<{ success: boolean }>(`/fasting/history/${id}`, {
+    method: 'DELETE',
+  });
+
+export const apiDeleteFastingHistory = apiDeleteFastingSession;
+
+// ============================================================================
+// GPS ACTIVITIES & TELEMETRY API
+// ============================================================================
+export const apiGetGpsActivities = () =>
+  request<GpsActivityRecord[]>('/gps-activities');
+
+export const apiSaveGpsActivity = (activity: Partial<GpsActivityRecord>) =>
+  request<GpsActivityRecord>('/gps-activities', {
+    method: 'POST',
+    body: JSON.stringify(activity),
+  });
+
+export const apiDeleteGpsActivity = (id: string) =>
+  request<{ success: boolean }>(`/gps-activities/${id}`, {
+    method: 'DELETE',
+  });
+
 

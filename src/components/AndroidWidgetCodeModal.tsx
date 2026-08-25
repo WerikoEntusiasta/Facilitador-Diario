@@ -7,10 +7,113 @@ interface AndroidWidgetCodeModalProps {
 }
 
 export const AndroidWidgetCodeModal: React.FC<AndroidWidgetCodeModalProps> = ({ isOpen, onClose }) => {
-  const [activeTab, setActiveTab] = useState<'kotlin' | 'xml' | 'info' | 'manifest'>('kotlin');
+  const [activeTab, setActiveTab] = useState<'quick_note' | 'kotlin' | 'xml' | 'info' | 'manifest'>('quick_note');
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
+
+  const quickNoteKotlinCode = `package com.keepflow.app.widgets
+
+import android.app.PendingIntent
+import android.appwidget.AppWidgetManager
+import android.appwidget.AppWidgetProvider
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.RemoteViews
+import com.keepflow.app.MainActivity
+import com.keepflow.app.R
+
+/**
+ * KeepFlow Quick Note Widget Provider (Home Screen Widget)
+ * Permite ao usuário criar notas rápidas diretamente da tela inicial do celular.
+ */
+class QuickNoteWidgetProvider : AppWidgetProvider() {
+
+    override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
+        for (appWidgetId in appWidgetIds) {
+            updateAppWidget(context, appWidgetManager, appWidgetId)
+        }
+    }
+
+    companion object {
+        internal fun updateAppWidget(context: Context, appWidgetManager: AppWidgetManager, appWidgetId: Int) {
+            val views = RemoteViews(context.packageName, R.layout.widget_quick_note)
+
+            // Intent to open quick note composer directly
+            val quickNoteIntent = Intent(context, MainActivity::class.java).apply {
+                action = Intent.ACTION_VIEW
+                data = Uri.parse("https://ais-dev-l4g4u7bqaz6ibo5byvyh7i-215070016480.us-east5.run.app/?action=quick_note")
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                101,
+                quickNoteIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            // Click listener on Quick Note Button
+            views.setOnClickPendingIntent(R.id.btnQuickNote, pendingIntent)
+            views.setOnClickPendingIntent(R.id.widgetQuickNoteRoot, pendingIntent)
+
+            appWidgetManager.updateAppWidget(appWidgetId, views)
+        }
+    }
+}`;
+
+  const quickNoteXmlCode = `<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetQuickNoteRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg_gradient"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <ImageView
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:src="@drawable/ic_keepflow_note"
+            android:tint="#10B981" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:text="Nota Rápida"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/btnQuickNote"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/btn_circle_emerald"
+            android:src="@drawable/ic_add"
+            android:tint="#0F172A" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/input_fake_bg"
+        android:padding="8dp"
+        android:text="Toque para ditar ou digitar uma nota rápida..."
+        android:textColor="#94A3B8"
+        android:textSize="12sp" />
+
+</LinearLayout>`;
 
   const kotlinCode = `package com.keepflow.app.widgets
 
@@ -98,6 +201,7 @@ class KeepFlowWidgetProvider : AppWidgetProvider() {
 </appwidget-provider>`;
 
   const currentText = 
+    activeTab === 'quick_note' ? quickNoteKotlinCode :
     activeTab === 'kotlin' ? kotlinCode : 
     activeTab === 'xml' ? xmlLayoutCode : 
     activeTab === 'info' ? widgetInfoCode : 
@@ -119,8 +223,8 @@ class KeepFlowWidgetProvider : AppWidgetProvider() {
               <Smartphone className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">Código Nativo Android (AppWidget)</h2>
-              <p className="text-xs text-slate-400">Kotlin, XML Layouts e Manifest para Widgets Nativos</p>
+              <h2 className="text-base font-bold text-white">Código Nativo Android (AppWidget & Nota Rápida)</h2>
+              <p className="text-xs text-slate-400">Kotlin, XML Layouts e Manifest para Widgets da Tela Inicial</p>
             </div>
           </div>
           <button
@@ -134,7 +238,8 @@ class KeepFlowWidgetProvider : AppWidgetProvider() {
         {/* Tabs */}
         <div className="flex items-center gap-2 p-4 bg-slate-900/60 border-b border-white/10 overflow-x-auto">
           {[
-            { id: 'kotlin', label: 'AppWidgetProvider.kt', icon: Cpu },
+            { id: 'quick_note', label: 'QuickNoteWidgetProvider.kt', icon: Cpu },
+            { id: 'kotlin', label: 'KeepFlowWidgetProvider.kt', icon: Cpu },
             { id: 'xml', label: 'widget_layout.xml', icon: Code },
             { id: 'info', label: 'keepflow_widget_info.xml', icon: Layers },
             { id: 'manifest', label: 'AndroidManifest.xml', icon: Smartphone },

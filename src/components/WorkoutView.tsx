@@ -22,9 +22,18 @@ import {
   ArrowUp,
   ArrowDown,
   GripVertical,
+  BookOpen,
+  Search,
+  Zap,
+  KeyRound,
 } from 'lucide-react';
 import { WorkoutRoutine, WorkoutDay, Exercise } from '../types';
 import { apiGetWorkouts, apiCreateWorkout, apiUpdateWorkout, apiDeleteWorkout, apiGetSharedWorkout } from '../lib/api';
+import { ExerciseLibraryModal } from './ExerciseLibraryModal';
+import { WorkoutShareModal } from './WorkoutShareModal';
+import { WorkoutImportCodeModal } from './WorkoutImportCodeModal';
+import { exportWorkoutToPdf } from '../lib/pdfExport';
+import { decodeWorkoutData } from '../lib/workoutShare';
 
 const DAY_NAMES = [
   'Domingo',
@@ -200,6 +209,7 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
 
   // Modal / Form States
   const [isExerciseModalOpen, setIsExerciseModalOpen] = useState(false);
+  const [isLibraryModalOpen, setIsLibraryModalOpen] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [exerciseForm, setExerciseForm] = useState({
     name: '',
@@ -217,22 +227,76 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
   const [isNewWorkoutOpen, setIsNewWorkoutOpen] = useState(false);
   const [newRoutineTitle, setNewRoutineTitle] = useState('');
 
+  // Share, Import by Code & PDF Export States
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isImportCodeModalOpen, setIsImportCodeModalOpen] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
   // Drag and Drop State
   const [draggedExerciseIndex, setDraggedExerciseIndex] = useState<number | null>(null);
 
+  const handleWorkoutImported = (importedWorkout: WorkoutRoutine) => {
+    setWorkouts((prev) => [importedWorkout, ...prev.filter((w) => w.id !== importedWorkout.id)]);
+    setActiveWorkout(importedWorkout);
+  };
+
   useEffect(() => {
     loadWorkouts();
-    if (sharedWorkoutId) {
-      loadSharedWorkout(sharedWorkoutId);
-    }
+    checkUrlForSharedWorkout();
   }, [sharedWorkoutId]);
+
+  const checkUrlForSharedWorkout = async () => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const wdata = params.get('wdata');
+      const swId = params.get('shared_workout');
+
+      // 1. Try decoding embedded data (works everywhere, even across different servers/offline)
+      if (wdata) {
+        const decoded = decodeWorkoutData(wdata);
+        if (decoded && decoded.title && decoded.days) {
+          const sharedObj = {
+            id: decoded.id || Date.now(),
+            title: decoded.title,
+            description: decoded.description || '',
+            author_name: (decoded as any).author_name || 'Colega de Treino',
+            days: decoded.days,
+            created_at: new Date().toISOString(),
+          };
+          setSharedWorkoutInfo(sharedObj);
+          setActiveWorkout({
+            id: sharedObj.id,
+            user_id: 0,
+            title: sharedObj.title,
+            description: sharedObj.description,
+            days: sharedObj.days,
+            created_at: sharedObj.created_at,
+            updated_at: sharedObj.created_at,
+          });
+          return;
+        }
+      }
+
+      // 2. Fallback to API by ID
+      if (swId || sharedWorkoutId) {
+        const idToLoad = Number(swId || sharedWorkoutId);
+        if (!isNaN(idToLoad) && idToLoad > 0) {
+          await loadSharedWorkout(idToLoad);
+        }
+      }
+    } catch (err) {
+      console.error('Erro ao verificar treino compartilhado:', err);
+    }
+  };
 
   const loadWorkouts = async () => {
     setLoading(true);
     try {
       const data = await apiGetWorkouts();
       setWorkouts(data);
-      if (!sharedWorkoutId && data.length > 0) {
+      const params = new URLSearchParams(window.location.search);
+      const hasShared = params.get('shared_workout') || params.get('wdata') || sharedWorkoutId;
+      if (!hasShared && data.length > 0) {
         setActiveWorkout(data[0]);
       }
     } catch (err) {
@@ -282,17 +346,23 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
 
   const handleShareWorkout = () => {
     if (!activeWorkout) return;
-    const shareUrl = `${window.location.origin}/?shared_workout=${activeWorkout.id}`;
-    navigator.clipboard.writeText(shareUrl).then(() => {
-      setShareToast('Link de compartilhamento copiado! Envie para seus colegas seguirem o mesmo treino.');
-      setTimeout(() => setShareToast(null), 4000);
-    }).catch(() => {
-      prompt('Copie o link de compartilhamento abaixo:', shareUrl);
-    });
+    setIsShareModalOpen(true);
   };
 
-  const handleDownloadPdf = () => {
-    window.print();
+  const handleDownloadPdf = async () => {
+    if (!activeWorkout) return;
+    setIsGeneratingPdf(true);
+    try {
+      await exportWorkoutToPdf(activeWorkout, true);
+      setShareToast('PDF gerado com sucesso! Arquivo baixado e salvo na Central de Documentos.');
+      setTimeout(() => setShareToast(null), 5000);
+    } catch (err) {
+      console.error('Erro ao exportar PDF do treino:', err);
+      // Fallback to print if browser error
+      window.print();
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const handleToggleExercise = async (exerciseId: string) => {
@@ -386,6 +456,27 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
     setEditingExercise(null);
     setExerciseForm({ name: '', sets: '4', reps: '10-12', weight: '', notes: '' });
 
+    await apiUpdateWorkout(activeWorkout.id, { days: updatedDays });
+  };
+
+  const handleAddFromLibrary = async (newExData: Omit<Exercise, 'id'>) => {
+    if (!activeWorkout) return;
+    const currentDay = activeWorkout.days[selectedDayIndex];
+    if (!currentDay) return;
+
+    const newEx: Exercise = {
+      id: `ex-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      ...newExData,
+      completed: false,
+    };
+
+    const newExercises = [...currentDay.exercises, newEx];
+    const updatedDays = activeWorkout.days.map((day, idx) =>
+      idx === selectedDayIndex ? { ...day, exercises: newExercises } : day
+    );
+
+    const updatedWorkout = { ...activeWorkout, days: updatedDays };
+    setActiveWorkout(updatedWorkout);
     await apiUpdateWorkout(activeWorkout.id, { days: updatedDays });
   };
 
@@ -586,44 +677,62 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
             </p>
           </div>
 
-          {/* Routine Switcher & Actions */}
-          <div className="flex flex-wrap items-center gap-2">
-            {workouts.length > 1 && (
-              <select
-                value={activeWorkout?.id || ''}
-                onChange={(e) => {
-                  const selected = workouts.find((w) => w.id === Number(e.target.value));
-                  if (selected) setActiveWorkout(selected);
-                }}
-                className="bg-slate-900/60 backdrop-blur-md text-white border border-white/20 text-xs rounded-xl px-3 py-2 font-medium focus:outline-none"
+            {/* Routine Switcher & Actions */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setIsLibraryModalOpen(true)}
+                className="px-3.5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 rounded-xl transition text-xs font-extrabold flex items-center gap-1.5 shadow-md cursor-pointer"
+                title="Abrir catálogo com +1.300 exercícios"
               >
-                {workouts.map((w) => (
-                  <option key={w.id} value={w.id} className="bg-slate-900 text-white">
-                    {w.title}
-                  </option>
-                ))}
-              </select>
-            )}
+                <BookOpen size={16} /> Biblioteca de Exercícios (+1.300)
+              </button>
+
+              <button
+                onClick={() => setIsImportCodeModalOpen(true)}
+                className="px-3.5 py-2.5 bg-indigo-500/85 hover:bg-indigo-500 text-white rounded-xl transition text-xs font-extrabold flex items-center gap-1.5 shadow-md cursor-pointer border border-indigo-300/30 backdrop-blur-sm"
+                title="Importar ficha de treino de outro usuário através de um código"
+              >
+                <KeyRound size={16} className="text-amber-300" /> Importar por Código
+              </button>
+
+              {workouts.length > 1 && (
+                <select
+                  value={activeWorkout?.id || ''}
+                  onChange={(e) => {
+                    const selected = workouts.find((w) => w.id === Number(e.target.value));
+                    if (selected) setActiveWorkout(selected);
+                  }}
+                  className="bg-slate-900/60 backdrop-blur-md text-white border border-white/20 text-xs rounded-xl px-3 py-2 font-medium focus:outline-none"
+                >
+                  {workouts.map((w) => (
+                    <option key={w.id} value={w.id} className="bg-slate-900 text-white">
+                      {w.title}
+                    </option>
+                  ))}
+                </select>
+              )}
 
             {activeWorkout && (
               <>
                 <button
                   onClick={handleShareWorkout}
-                  className="px-3.5 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/20 text-white rounded-xl transition text-xs font-semibold flex items-center gap-1.5 shadow-sm"
-                  title="Compartilhar link com colegas"
+                  className="px-3.5 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/20 text-white rounded-xl transition text-xs font-semibold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  title="Compartilhar link acessível e código de treino com colegas"
                 >
-                  <Share2 size={16} /> Compartilhar Link
+                  <Share2 size={16} /> Compartilhar Ficha
                 </button>
                 <button
                   onClick={handleDownloadPdf}
-                  className="px-3.5 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/20 text-white rounded-xl transition text-xs font-semibold flex items-center gap-1.5 shadow-sm"
-                  title="Baixar ou imprimir PDF do treino"
+                  disabled={isGeneratingPdf}
+                  className="px-3.5 py-2.5 bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/20 text-white rounded-xl transition text-xs font-semibold flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50"
+                  title="Baixar ficha de treino em PDF formatado"
                 >
-                  <Award size={16} /> Baixar PDF
+                  <Award size={16} className={isGeneratingPdf ? 'animate-spin' : ''} />
+                  <span>{isGeneratingPdf ? 'Gerando PDF...' : 'Baixar PDF'}</span>
                 </button>
                 <button
                   onClick={() => handleDeleteWorkout(activeWorkout.id)}
-                  className="p-2.5 bg-red-500/20 hover:bg-red-500/40 border border-red-300/30 text-white rounded-xl transition text-xs flex items-center gap-1.5"
+                  className="p-2.5 bg-red-500/20 hover:bg-red-500/40 border border-red-300/30 text-white rounded-xl transition text-xs flex items-center gap-1.5 cursor-pointer"
                   title="Excluir este treino"
                 >
                   <Trash2 size={16} />
@@ -637,11 +746,19 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
       {/* Preset Workout Templates Selector (If no workout or wants to add) */}
       {(!activeWorkout || workouts.length === 0) && (
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <div className="flex items-center gap-2 text-slate-800 dark:text-slate-100 font-bold text-lg">
-            <Sparkles size={20} className="text-emerald-500" /> Escolha uma Ficha de Treino Pronta
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-slate-800 dark:text-slate-100 font-bold text-lg">
+              <Sparkles size={20} className="text-emerald-500" /> Escolha uma Ficha Pronta ou Importe por Código
+            </div>
+            <button
+              onClick={() => setIsImportCodeModalOpen(true)}
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2 transition cursor-pointer self-start sm:self-auto"
+            >
+              <KeyRound size={15} /> Tenho um Código de Colega
+            </button>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Selecione uma rotina semanal pré-configurada para começar imediatamente:
+            Selecione uma rotina semanal pré-configurada ou insira o código recebido de outro usuário:
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
@@ -800,6 +917,14 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
                   </button>
 
                   <button
+                    onClick={() => setIsLibraryModalOpen(true)}
+                    className="px-3.5 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold rounded-xl shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                    title="Adicionar da biblioteca de +1.300 exercícios"
+                  >
+                    <BookOpen size={16} /> Biblioteca (+1.300 Exercícios)
+                  </button>
+
+                  <button
                     onClick={() => {
                       setEditingExercise(null);
                       setExerciseForm({
@@ -813,157 +938,179 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
                     }}
                     className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Plus size={16} /> Adicionar Exercício
+                    <Plus size={16} /> Manual
                   </button>
                 </div>
               </div>
 
               {/* Exercises List */}
               {currentDayData.exercises.length === 0 ? (
-                <div className="py-12 text-center space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
-                    <Dumbbell size={24} />
+                <div className="py-12 text-center space-y-4 max-w-lg mx-auto">
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
+                    <Dumbbell size={28} />
                   </div>
-                  <p className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                    Nenhum exercício cadastrado para {currentDayData.day_name}.
-                  </p>
-                  <button
-                    onClick={() => {
-                      setEditingExercise(null);
-                      setExerciseForm({
-                        name: '',
-                        sets: '4',
-                        reps: '10-12',
-                        weight: '',
-                        notes: '',
-                      });
-                      setIsExerciseModalOpen(true);
-                    }}
-                    className="inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
-                  >
-                    <Plus size={14} /> Adicionar o primeiro exercício
-                  </button>
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-200">
+                      Nenhum exercício cadastrado para {currentDayData.day_name}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      Escolha exercícios diretamente da nossa biblioteca completa ou cadastre manualmente.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                    <button
+                      onClick={() => setIsLibraryModalOpen(true)}
+                      className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl text-xs font-extrabold shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <BookOpen size={16} /> Explorar Biblioteca (+1.300)
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingExercise(null);
+                        setExerciseForm({
+                          name: '',
+                          sets: '4',
+                          reps: '10-12',
+                          weight: '',
+                          notes: '',
+                        });
+                        setIsExerciseModalOpen(true);
+                      }}
+                      className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus size={16} /> Criar Manualmente
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-3">
-                  {currentDayData.exercises.map((ex, exIdx) => (
-                    <div
-                      key={ex.id || exIdx}
-                      draggable={true}
-                      onDragStart={(e) => handleDragStart(e, exIdx)}
-                      onDragOver={handleDragOver}
-                      onDrop={(e) => handleDrop(e, exIdx)}
-                      className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-grab active:cursor-grabbing ${
-                        draggedExerciseIndex === exIdx ? 'opacity-40 border-dashed border-indigo-500' : ''
-                      } ${
-                        ex.completed
-                          ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/50'
-                          : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600'
-                      }`}
-                    >
-                      {/* Left: Drag Handle, Checkbox & Name */}
-                      <div className="flex items-start sm:items-center gap-3">
-                        <div
-                          className="text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 cursor-grab active:cursor-grabbing mt-1 sm:mt-0"
-                          title="Clique e arraste para reordenar"
-                        >
-                          <GripVertical size={18} />
-                        </div>
-
-                        <button
-                          onClick={() => handleToggleExercise(ex.id)}
-                          className="mt-0.5 sm:mt-0 text-emerald-600 dark:text-emerald-400 transition"
-                        >
-                          {ex.completed ? (
-                            <CheckCircle2 size={22} className="fill-emerald-500 text-white" />
-                          ) : (
-                            <Circle size={22} className="text-slate-300 dark:text-slate-600 hover:text-emerald-500" />
-                          )}
-                        </button>
-
-                        <div>
-                          <h4
-                            className={`text-base font-bold ${
-                              ex.completed
-                                ? 'line-through text-slate-500 dark:text-slate-400'
-                                : 'text-slate-900 dark:text-white'
-                            }`}
+                  {currentDayData.exercises.map((ex, exIdx) => {
+                    return (
+                      <div
+                        key={ex.id || exIdx}
+                        draggable={true}
+                        onDragStart={(e) => handleDragStart(e, exIdx)}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, exIdx)}
+                        className={`p-4 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-grab active:cursor-grabbing ${
+                          draggedExerciseIndex === exIdx ? 'opacity-40 border-dashed border-indigo-500' : ''
+                        } ${
+                          ex.completed
+                            ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/50'
+                            : 'bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700/80 hover:border-slate-300 dark:hover:border-slate-600'
+                        }`}
+                      >
+                        {/* Left: Drag Handle, Checkbox & Name */}
+                        <div className="flex items-start sm:items-center gap-3">
+                          <div
+                            className="text-slate-300 dark:text-slate-600 hover:text-slate-500 dark:hover:text-slate-400 cursor-grab active:cursor-grabbing mt-1 sm:mt-0"
+                            title="Clique e arraste para reordenar"
                           >
-                            {ex.name}
-                          </h4>
+                            <GripVertical size={18} />
+                          </div>
 
-                          {ex.notes && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
-                              <Info size={12} className="text-emerald-500" /> {ex.notes}
-                            </p>
-                          )}
+                          <button
+                            onClick={() => handleToggleExercise(ex.id)}
+                            className="mt-0.5 sm:mt-0 text-emerald-600 dark:text-emerald-400 transition cursor-pointer"
+                          >
+                            {ex.completed ? (
+                              <CheckCircle2 size={22} className="fill-emerald-500 text-white" />
+                            ) : (
+                              <Circle size={22} className="text-slate-300 dark:text-slate-600 hover:text-emerald-500" />
+                            )}
+                          </button>
+
+                          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/50 text-emerald-600 dark:text-emerald-400 shrink-0 flex items-center justify-center font-bold text-xs">
+                            <Dumbbell size={18} />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4
+                                className={`text-base font-bold ${
+                                  ex.completed
+                                    ? 'line-through text-slate-500 dark:text-slate-400'
+                                    : 'text-slate-900 dark:text-white'
+                                }`}
+                              >
+                                {ex.name}
+                              </h4>
+                            </div>
+
+                            {ex.notes && (
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1">
+                                <Info size={12} className="text-emerald-500 shrink-0" /> {ex.notes}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Right: Sets, Reps, Weight & Actions */}
-                      <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 dark:border-slate-700/50">
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold">
-                            {ex.sets} séries
-                          </span>
-                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold">
-                            {ex.reps} reps
-                          </span>
-                          {ex.weight && (
-                            <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-bold">
-                              {ex.weight}
+                        {/* Right: Sets, Reps, Weight & Actions */}
+                        <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 dark:border-slate-700/50">
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold">
+                              {ex.sets} séries
                             </span>
-                          )}
-                        </div>
+                            <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold">
+                              {ex.reps} reps
+                            </span>
+                            {ex.weight && (
+                              <span className="px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 font-bold">
+                                {ex.weight}
+                              </span>
+                            )}
+                          </div>
 
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => handleMoveExerciseUp(exIdx)}
-                            disabled={exIdx === 0}
-                            className={`p-1.5 rounded-lg ${exIdx === 0 ? 'text-slate-300 dark:text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                            title="Mover para cima"
-                          >
-                            <ArrowUp size={15} />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleMoveExerciseUp(exIdx)}
+                              disabled={exIdx === 0}
+                              className={`p-1.5 rounded-lg ${exIdx === 0 ? 'text-slate-300 dark:text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                              title="Mover para cima"
+                            >
+                              <ArrowUp size={15} />
+                            </button>
 
-                          <button
-                            onClick={() => handleMoveExerciseDown(exIdx)}
-                            disabled={exIdx === currentDayData.exercises.length - 1}
-                            className={`p-1.5 rounded-lg ${exIdx === currentDayData.exercises.length - 1 ? 'text-slate-300 dark:text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
-                            title="Mover para baixo"
-                          >
-                            <ArrowDown size={15} />
-                          </button>
+                            <button
+                              onClick={() => handleMoveExerciseDown(exIdx)}
+                              disabled={exIdx === currentDayData.exercises.length - 1}
+                              className={`p-1.5 rounded-lg ${exIdx === currentDayData.exercises.length - 1 ? 'text-slate-300 dark:text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
+                              title="Mover para baixo"
+                            >
+                              <ArrowDown size={15} />
+                            </button>
 
-                          <button
-                            onClick={() => {
-                              setEditingExercise(ex);
-                              setExerciseForm({
-                                name: ex.name,
-                                sets: ex.sets,
-                                reps: ex.reps,
-                                weight: ex.weight || '',
-                                notes: ex.notes || '',
-                              });
-                              setIsExerciseModalOpen(true);
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
-                            title="Editar exercício"
-                          >
-                            <Edit3 size={15} />
-                          </button>
+                            <button
+                              onClick={() => {
+                                setEditingExercise(ex);
+                                setExerciseForm({
+                                  name: ex.name,
+                                  sets: ex.sets,
+                                  reps: ex.reps,
+                                  weight: ex.weight || '',
+                                  notes: ex.notes || '',
+                                  gif_url: ex.gif_url || '',
+                                });
+                                setIsExerciseModalOpen(true);
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+                              title="Editar exercício"
+                            >
+                              <Edit3 size={15} />
+                            </button>
 
-                          <button
-                            onClick={() => handleDeleteExercise(ex.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40"
-                            title="Excluir exercício"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                            <button
+                              onClick={() => handleDeleteExercise(ex.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40"
+                              title="Excluir exercício"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -986,6 +1133,28 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
                 className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 <X size={18} />
+              </button>
+            </div>
+
+            {/* Quick Catalog Picker button */}
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-200 dark:border-amber-800/60 flex items-center justify-between gap-3">
+              <div className="text-xs">
+                <span className="font-bold text-amber-900 dark:text-amber-200 block">
+                  Prefere escolher do catálogo?
+                </span>
+                <span className="text-[11px] text-amber-700 dark:text-amber-400">
+                  +1.300 exercícios categorizados por grupo muscular
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsExerciseModalOpen(false);
+                  setIsLibraryModalOpen(true);
+                }}
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
+              >
+                <BookOpen size={14} /> Abrir Catálogo
               </button>
             </div>
 
@@ -1128,6 +1297,28 @@ export const WorkoutView: React.FC<{ sharedWorkoutId?: number | null }> = ({ sha
           </div>
         </div>
       )}
+
+      {/* EXERCISE LIBRARY MODAL (+1.300 EXERCISES) */}
+      <ExerciseLibraryModal
+        isOpen={isLibraryModalOpen}
+        onClose={() => setIsLibraryModalOpen(false)}
+        onAddExercise={handleAddFromLibrary}
+        targetDayName={currentDayData?.day_name}
+      />
+
+      {/* SHARE WORKOUT MODAL */}
+      <WorkoutShareModal
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        workout={activeWorkout}
+      />
+
+      {/* IMPORT WORKOUT BY CODE MODAL */}
+      <WorkoutImportCodeModal
+        isOpen={isImportCodeModalOpen}
+        onClose={() => setIsImportCodeModalOpen(false)}
+        onWorkoutImported={handleWorkoutImported}
+      />
     </div>
   );
 };

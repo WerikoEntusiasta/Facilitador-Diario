@@ -18,6 +18,13 @@ import {
   RefreshCw,
   Bell,
   Sun,
+  Moon,
+  Zap,
+  Sparkles,
+  Database,
+  SlidersHorizontal,
+  Activity,
+  Smartphone,
 } from 'lucide-react';
 import { ViewTab, Label, User } from '../types';
 
@@ -37,6 +44,11 @@ interface SidebarProps {
   currentUser?: User | null;
   onOpenNotificationModal?: () => void;
   onOpenEditProfile?: () => void;
+  onOpenPomodoro?: () => void;
+  onOpenTemplates?: () => void;
+  onOpenBackup?: () => void;
+  darkMode?: boolean;
+  onToggleDarkMode?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -55,13 +67,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentUser,
   onOpenNotificationModal,
   onOpenEditProfile,
+  onOpenPomodoro,
+  onOpenTemplates,
+  onOpenBackup,
+  darkMode,
+  onToggleDarkMode,
 }) => {
   const navItems = [
     { id: 'dashboard' as ViewTab, label: 'Dashboard Geral', icon: LayoutDashboard },
     { id: 'tasks' as ViewTab, label: 'Menu Tarefas', icon: CheckSquare },
     { id: 'notes' as ViewTab, label: 'Notas (Keep)', icon: FileText, count: notesCount },
+    { id: 'widgets' as ViewTab, label: 'Widgets (Tela Inicial)', icon: Sparkles },
     { id: 'workouts' as ViewTab, label: 'Treinos da Academia', icon: Dumbbell },
     { id: 'fasting' as ViewTab, label: 'Jejum Intermitente', icon: Flame },
+    {
+      id: 'telemetry' as ViewTab,
+      label: 'Telemetria & GPS',
+      icon: Activity,
+      badgeText: 'TESTE',
+    },
+    { id: 'android_app' as ViewTab, label: 'App Android & APK', icon: Smartphone },
     { id: 'pdfs' as ViewTab, label: 'Central de PDFs', icon: FileCheck, count: pdfCount },
     { id: 'vault' as ViewTab, label: 'Cofre de Senhas', icon: ShieldCheck },
     { id: 'archive' as ViewTab, label: 'Arquivados', icon: FolderArchive, count: archiveCount },
@@ -132,30 +157,121 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         {item.count}
                       </span>
                     )}
+                    {(item as any).badgeText && (
+                      <span
+                        className={`text-[9px] px-1.5 py-0.5 rounded-md font-extrabold uppercase tracking-wide ${
+                          isActive
+                            ? 'bg-amber-400 text-slate-950 shadow-xs'
+                            : 'bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                        }`}
+                      >
+                        {(item as any).badgeText}
+                      </span>
+                    )}
                   </button>
                 );
               })}
             </nav>
 
-              {onOpenNotificationModal && (
-                <div className="mt-3">
-                  <button
-                    onClick={() => {
-                      onOpenNotificationModal();
-                      onCloseMobile();
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:text-amber-700 dark:hover:text-amber-300 transition border border-dashed border-slate-200 dark:border-slate-800"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Bell size={18} className="text-amber-500" />
-                      <span>Notificações & DND</span>
-                    </div>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
-                      Config
-                    </span>
-                  </button>
+              {/* Quick Tools Section (Mobile App Only - on Desktop/Web they are in the top header) */}
+              <div className="pt-2 md:hidden">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 mb-2 flex items-center gap-1.5">
+                  <SlidersHorizontal size={13} className="text-slate-400" />
+                  <span>Ferramentas & Ações</span>
                 </div>
-              )}
+                <div className="space-y-1">
+                  {onOpenPomodoro && (
+                    <button
+                      onClick={() => {
+                        onOpenPomodoro();
+                        onCloseMobile();
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 hover:text-indigo-600 dark:hover:text-indigo-400 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Zap size={18} className="text-indigo-500 fill-indigo-500/20" />
+                        <span>Modo Foco (Pomodoro)</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+                        Timer
+                      </span>
+                    </button>
+                  )}
+
+                  {onOpenTemplates && (
+                    <button
+                      onClick={() => {
+                        onOpenTemplates();
+                        onCloseMobile();
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 hover:text-amber-600 dark:hover:text-amber-400 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Sparkles size={18} className="text-amber-500" />
+                        <span>Modelos Prontos</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+                        Templates
+                      </span>
+                    </button>
+                  )}
+
+                  {onOpenBackup && (
+                    <button
+                      onClick={() => {
+                        onOpenBackup();
+                        onCloseMobile();
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 hover:text-emerald-600 dark:hover:text-emerald-400 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Database size={18} className="text-emerald-500" />
+                        <span>Backup & Restauração</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                        JSON / DB
+                      </span>
+                    </button>
+                  )}
+
+                  {onOpenNotificationModal && (
+                    <button
+                      onClick={() => {
+                        onOpenNotificationModal();
+                        onCloseMobile();
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-sky-50 dark:hover:bg-sky-950/30 hover:text-sky-600 dark:hover:text-sky-400 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Bell size={18} className="text-sky-500" />
+                        <span>Notificações & DND</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300">
+                        Alertas
+                      </span>
+                    </button>
+                  )}
+
+                  {onToggleDarkMode && (
+                    <button
+                      onClick={onToggleDarkMode}
+                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        {darkMode ? (
+                          <Sun size={18} className="text-amber-400" />
+                        ) : (
+                          <Moon size={18} className="text-indigo-600" />
+                        )}
+                        <span>{darkMode ? 'Modo Claro' : 'Modo Escuro'}</span>
+                      </div>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                        {darkMode ? '☀️ Ativo' : '🌙 Ativo'}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
 
           {/* Labels Section */}

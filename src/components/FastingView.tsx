@@ -19,6 +19,8 @@ import {
   Award,
   Zap,
   RotateCcw,
+  Target,
+  ArrowRight,
 } from 'lucide-react';
 import { FastingSession } from '../types';
 import {
@@ -26,6 +28,7 @@ import {
   requestFastingNotificationPermission,
   sendFastingCompletionNotification,
 } from '../lib/fastingSound';
+import { calculateFastingEnd, formatFastingStart } from '../lib/fastingUtils';
 import { FastingWidget } from './FastingWidget';
 
 interface FastingViewProps {
@@ -179,6 +182,20 @@ export const FastingView: React.FC<FastingViewProps> = ({
   const remainingSeconds = Math.max(0, targetSeconds - elapsedSeconds);
   const isFinished = elapsedSeconds >= targetSeconds && activeSession?.status === 'active';
 
+  const activeEndEstimate = activeSession && activeSession.status === 'active'
+    ? calculateFastingEnd(activeSession.start_time, activeSession.target_hours)
+    : null;
+
+  const activeStartInfo = activeSession && activeSession.status === 'active'
+    ? formatFastingStart(activeSession.start_time)
+    : null;
+
+  const currentTargetHours = isCustom
+    ? Math.max(0.01, customHours + customMinutes / 60 + customSeconds / 3600)
+    : selectedHours;
+
+  const previewEnd = calculateFastingEnd(new Date(), currentTargetHours);
+
   const formatHMS = (totalSec: number) => {
     const h = Math.floor(totalSec / 3600);
     const m = Math.floor((totalSec % 3600) / 60);
@@ -322,7 +339,7 @@ export const FastingView: React.FC<FastingViewProps> = ({
                       {isFinished ? '00:00:00' : formatHMS(remainingSeconds)}
                     </span>
                     <span className="text-xs text-amber-300 font-semibold mt-1">
-                      Decorrito: {formatHMS(elapsedSeconds)}
+                      Decorrido: {formatHMS(elapsedSeconds)}
                     </span>
                     <span className="text-sm font-extrabold text-indigo-300 mt-1">
                       {Math.floor(progressPercent)}% Concluído
@@ -337,6 +354,73 @@ export const FastingView: React.FC<FastingViewProps> = ({
                   </div>
                 )}
               </div>
+
+              {/* Start & Projected Finish Date & Time Box */}
+              {activeEndEstimate && (
+                <div className="bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-purple-500/10 rounded-2xl p-4 border border-amber-500/30 mb-6 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                      <Calendar className="w-4 h-4 text-amber-400" />
+                      Cronograma & Previsão de Término
+                    </span>
+                    <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                      {activeSession.target_hours}h total
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="bg-slate-900/60 p-3 rounded-xl border border-white/5 flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-300 flex items-center justify-center shrink-0 mt-0.5">
+                        <Clock className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Início da Janela</span>
+                        <span className="text-sm font-bold text-white block">
+                          {activeStartInfo?.summary || new Date(activeSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block">
+                          {new Date(activeSession.start_time).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="bg-amber-500/15 p-3 rounded-xl border border-amber-500/30 flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-amber-500/30 text-amber-300 flex items-center justify-center shrink-0 mt-0.5">
+                        <Target className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-amber-300 block">Término Previsto</span>
+                        <span className="text-sm font-black text-amber-200 block">
+                          {activeEndEstimate.dayLabel} às {activeEndEstimate.timeStr}
+                        </span>
+                        <span className="text-[10px] text-amber-300/80 block">
+                          {activeEndEstimate.fullDateStr}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Visual Timeline Bar */}
+                  <div className="pt-2 border-t border-white/10 space-y-1.5">
+                    <div className="flex justify-between text-[11px] font-semibold text-slate-300">
+                      <span className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-indigo-400" />
+                        Iniciado ({new Date(activeSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                      </span>
+                      <span className="flex items-center gap-1 text-amber-300">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                        Término: {activeEndEstimate.dayLabel} às {activeEndEstimate.timeStr}
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden p-0.5 border border-white/10">
+                      <div
+                        className="h-full bg-gradient-to-r from-indigo-500 via-amber-400 to-emerald-400 rounded-full transition-all duration-500"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Water Log Controls & Goal */}
               <div className="bg-white/5 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-white/10 mb-6 space-y-4">
@@ -548,6 +632,45 @@ export const FastingView: React.FC<FastingViewProps> = ({
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* Live Calculation Preview Before Starting */}
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-amber-500/5 border border-amber-500/30 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-amber-500" />
+                    Cálculo do Término do Jejum
+                  </span>
+                  <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/30">
+                    {currentTargetHours.toFixed(currentTargetHours % 1 === 0 ? 0 : 2)}h duração
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div className="bg-white/80 dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 block mb-0.5">
+                      Início Imediato
+                    </span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                      Hoje às {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 block">
+                      {new Date().toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}
+                    </span>
+                  </div>
+
+                  <div className="bg-amber-500/15 dark:bg-amber-500/20 p-3 rounded-xl border border-amber-500/40">
+                    <span className="text-[10px] uppercase font-bold text-amber-800 dark:text-amber-300 block mb-0.5 flex items-center gap-1">
+                      <Target className="w-3 h-3 text-amber-600 dark:text-amber-400" /> Irá terminar em
+                    </span>
+                    <span className="text-sm font-black text-amber-900 dark:text-amber-200 block">
+                      {previewEnd.dayLabel} às {previewEnd.timeStr}
+                    </span>
+                    <span className="text-[10px] text-amber-700/80 dark:text-amber-300/80 block">
+                      {previewEnd.fullDateStr}
+                    </span>
+                  </div>
                 </div>
               </div>
 

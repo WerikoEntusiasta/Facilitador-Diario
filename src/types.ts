@@ -78,7 +78,7 @@ export interface PdfDocument {
   file_path: string;
   file_size: number;
   mime_type: string;
-  source_type: 'upload' | 'note_export' | 'kanban_export';
+  source_type: 'upload' | 'note_export' | 'kanban_export' | 'workout_export';
   created_at: string;
 }
 
@@ -120,6 +120,10 @@ export interface Exercise {
   weight: string;
   notes?: string;
   completed?: boolean;
+  gif_url?: string;
+  body_part?: string;
+  equipment?: string;
+  target?: string;
 }
 
 export interface WorkoutDay {
@@ -135,6 +139,8 @@ export interface WorkoutRoutine {
   user_id?: number;
   title: string;
   description?: string;
+  share_code?: string;
+  author_name?: string;
   days: WorkoutDay[];
   created_at?: string;
   updated_at?: string;
@@ -158,6 +164,7 @@ export interface VaultItem {
 
 export interface FastingSession {
   id: string;
+  user_id?: number;
   target_hours: number;
   start_time: string; // ISO date string
   end_time?: string; // ISO date string if finished or ended early
@@ -167,9 +174,52 @@ export interface FastingSession {
   water_goal?: number;
   water_history?: number[];
   protocol_name?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export type ViewTab = 'dashboard' | 'notes' | 'kanban' | 'workouts' | 'fasting' | 'tasks' | 'widgets' | 'pdfs' | 'vault' | 'archive' | 'trash' | 'admin';
+export interface GpsCoordinate {
+  latitude: number;
+  longitude: number;
+  timestamp?: number;
+  altitude?: number | null;
+  speed?: number | null;
+  accuracy?: number;
+}
+
+export interface GpsActivityRecord {
+  id: string;
+  user_id?: number;
+  activity_type: 'caminhada' | 'corrida' | 'ciclismo' | 'treino_livre';
+  title: string;
+  date: string;
+  total_steps: number;
+  total_calories: number;
+  total_distance_km: number;
+  duration_seconds: number;
+  avg_speed_kmh: number;
+  max_speed_kmh?: number;
+  avg_pace_min_km?: number;
+  route_points: GpsCoordinate[];
+  notes?: string;
+  created_at?: string;
+}
+
+export type ViewTab =
+  | 'dashboard'
+  | 'notes'
+  | 'kanban'
+  | 'workouts'
+  | 'fasting'
+  | 'telemetry'
+  | 'tasks'
+  | 'widgets'
+  | 'pdfs'
+  | 'vault'
+  | 'archive'
+  | 'trash'
+  | 'admin'
+  | 'android_app';
 
 export interface TaskItem {
   id: string;

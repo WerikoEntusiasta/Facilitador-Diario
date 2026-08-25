@@ -139,8 +139,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           </h1>
         </div>
 
-        {/* Search bar */}
-        <div className="flex-1 max-w-xl mx-2">
+        {/* Search bar (Desktop full bar, hidden on small mobile to prevent overflow) */}
+        <div className="hidden sm:block flex-1 max-w-xl mx-2">
           <div className="relative">
             <Search className="absolute left-3.5 top-2.5 text-slate-400" size={18} />
             <input
@@ -150,7 +150,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 if (onOpenGlobalSearch) onOpenGlobalSearch();
               }}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Buscar (Ctrl + K) em notas, tarefas, cartões ou arquivos..."
+              placeholder="Buscar (Ctrl + K) em notas, tarefas, cartões..."
               className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-100 rounded-xl text-sm border border-transparent focus:border-indigo-500 dark:focus:border-indigo-400 focus:bg-white dark:focus:bg-slate-800 outline-none transition placeholder:text-slate-400 dark:placeholder:text-slate-500 cursor-pointer"
             />
             {searchQuery && (
@@ -165,31 +165,41 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Right Action buttons */}
-        <div className="flex items-center gap-1.5">
-          {/* Connection Status Badge */}
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          {/* Mobile Search Icon Button */}
+          <button
+            onClick={() => {
+              if (onOpenGlobalSearch) onOpenGlobalSearch();
+            }}
+            className="sm:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            title="Buscar em tudo"
+          >
+            <Search size={19} className="text-slate-500 dark:text-slate-400" />
+          </button>
+
+          {/* Connection Status Badge (Tablet & Desktop) */}
           {syncState.isSyncing ? (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-xs font-medium animate-pulse" title="Sincronizando alterações com o servidor...">
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-xs font-medium animate-pulse" title="Sincronizando alterações com o servidor...">
               <RefreshCw size={14} className="animate-spin" />
-              <span className="hidden sm:inline">Sincronizando...</span>
+              <span className="hidden lg:inline">Sincronizando...</span>
             </div>
           ) : !syncState.isOnline ? (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-xs font-medium" title="Modo Offline Ativo. Seus dados e novas alterações estão salvos no dispositivo por até 3 dias.">
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800 text-xs font-medium" title="Modo Offline Ativo. Seus dados e novas alterações estão salvos no dispositivo por até 3 dias.">
               <WifiOff size={14} />
-              <span className="hidden sm:inline">Modo Offline (Cache 3 dias)</span>
+              <span className="hidden lg:inline">Modo Offline (Cache)</span>
             </div>
           ) : syncState.pendingCount > 0 ? (
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-800 text-xs font-medium" title={`${syncState.pendingCount} alterações salvas localmente e aguardando envio`}>
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400 border border-sky-200 dark:border-sky-800 text-xs font-medium" title={`${syncState.pendingCount} alterações salvas localmente e aguardando envio`}>
               <CloudCheck size={14} />
-              <span className="hidden sm:inline">{syncState.pendingCount} pendente(s)</span>
+              <span className="hidden lg:inline">{syncState.pendingCount} pendente(s)</span>
             </div>
           ) : null}
 
-
-          {/* Quick Action Tools */}
+          {/* Desktop Tools (Visible on Web/Desktop in the top header, hidden on mobile) */}
           {onOpenPomodoro && (
             <button
               onClick={onOpenPomodoro}
-              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"
+              className="hidden md:flex p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition items-center gap-1.5 text-xs font-medium cursor-pointer"
               title="Modo Foco & Cronômetro Pomodoro"
             >
               <Zap size={18} className="text-indigo-500 fill-indigo-500/20" />
@@ -200,7 +210,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {onOpenTemplates && (
             <button
               onClick={onOpenTemplates}
-              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"
+              className="hidden md:flex p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition items-center gap-1.5 text-xs font-medium cursor-pointer"
               title="Modelos Prontos (Templates)"
             >
               <Sparkles size={18} className="text-amber-500" />
@@ -211,7 +221,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {onOpenBackup && (
             <button
               onClick={onOpenBackup}
-              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"
+              className="hidden md:flex p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition items-center gap-1.5 text-xs font-medium cursor-pointer"
               title="Backup e Restauração de Dados"
             >
               <Database size={18} className="text-emerald-500" />
@@ -219,35 +229,39 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          <button
-            onClick={onOpenLabelManager}
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"
-            title="Gerenciar Etiquetas"
-          >
-            <Tag size={18} className="text-indigo-500" />
-            <span className="hidden lg:inline">Etiquetas</span>
-          </button>
+          {onOpenLabelManager && (
+            <button
+              onClick={onOpenLabelManager}
+              className="hidden md:flex p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition items-center gap-1.5 text-xs font-medium cursor-pointer"
+              title="Gerenciar Etiquetas"
+            >
+              <Tag size={18} className="text-indigo-500" />
+              <span className="hidden xl:inline">Etiquetas</span>
+            </button>
+          )}
 
+          {/* Notifications Button (Mobile & Desktop) */}
           {onOpenNotificationModal && (
             <button
               onClick={onOpenNotificationModal}
-              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium"
-              title="Menu de Notificações & DND"
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5 text-xs font-medium shrink-0"
+              title="Menu de Notificações & Lembretes"
             >
               <Bell size={18} className="text-amber-500" />
               <span className="hidden lg:inline">Notificações</span>
             </button>
           )}
 
+          {/* Dark Mode Toggle (Mobile & Desktop) */}
           <button
             onClick={onToggleDarkMode}
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+            className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0"
             title={darkMode ? 'Modo Claro' : 'Modo Escuro'}
           >
             {darkMode ? <Sun size={19} className="text-amber-400" /> : <Moon size={19} className="text-indigo-600" />}
           </button>
 
-          <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
+          <div className="h-5 w-px bg-slate-200 dark:bg-slate-700 mx-0.5 sm:mx-1 shrink-0" />
 
           {/* User Auth / Profile Button */}
           <button
@@ -258,26 +272,26 @@ export const Navbar: React.FC<NavbarProps> = ({
                 onOpenAuth();
               }
             }}
-            className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition border border-slate-200 dark:border-slate-700 cursor-pointer group"
+            className="flex items-center gap-1.5 sm:gap-2 p-1 sm:p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition border border-slate-200 dark:border-slate-700 cursor-pointer group shrink-0"
             title={currentUser ? `Editar Perfil & Foto (${currentUser.name})` : 'Fazer Login / Criar Conta'}
           >
             {currentUser?.avatar ? (
               <img
                 src={currentUser.avatar}
                 alt={currentUser.name}
-                className="w-7 h-7 rounded-lg object-cover ring-2 ring-emerald-500/40 group-hover:scale-105 transition"
+                className="w-7 h-7 rounded-lg object-cover ring-2 ring-emerald-500/40 group-hover:scale-105 transition shrink-0"
               />
             ) : (
-              <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 flex items-center justify-center group-hover:scale-105 transition">
+              <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 flex items-center justify-center group-hover:scale-105 transition shrink-0">
                 <UserIcon size={16} />
               </div>
             )}
             <div className="hidden sm:block text-left text-xs pr-1">
-              <span className="block font-bold text-slate-800 dark:text-slate-200 max-w-[90px] truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
+              <span className="block font-bold text-slate-800 dark:text-slate-200 max-w-[85px] truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition">
                 {currentUser ? currentUser.name : 'Entrar'}
               </span>
               <span className="block text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">
-                {currentUser ? 'Editar Perfil ⚙️' : 'Criar Conta'}
+                {currentUser ? 'Perfil ⚙️' : 'Criar Conta'}
               </span>
             </div>
           </button>

@@ -190,6 +190,40 @@ function createSchema(db: Database) {
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS fasting_sessions (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER DEFAULT 1,
+      target_hours INTEGER NOT NULL,
+      start_time TEXT NOT NULL,
+      end_time TEXT DEFAULT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      protocol_name TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      water_ml INTEGER DEFAULT 0,
+      water_goal INTEGER DEFAULT 2000,
+      water_history TEXT DEFAULT '[]',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS gps_activities (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER DEFAULT 1,
+      activity_type TEXT DEFAULT 'caminhada',
+      title TEXT DEFAULT 'Atividade GPS',
+      date TEXT NOT NULL,
+      total_steps INTEGER DEFAULT 0,
+      total_calories INTEGER DEFAULT 0,
+      total_distance_km REAL DEFAULT 0,
+      duration_seconds INTEGER DEFAULT 0,
+      avg_speed_kmh REAL DEFAULT 0,
+      max_speed_kmh REAL DEFAULT 0,
+      avg_pace_min_km REAL DEFAULT 0,
+      route_points_json TEXT DEFAULT '[]',
+      notes TEXT DEFAULT '',
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   // Ensure columns exist on existing databases
@@ -200,10 +234,13 @@ function createSchema(db: Database) {
   safeAddColumn(db, 'kanban_boards', 'user_id INTEGER DEFAULT 1');
   safeAddColumn(db, 'pdf_documents', 'user_id INTEGER DEFAULT 1');
   safeAddColumn(db, 'workouts', 'user_id INTEGER DEFAULT 1');
+  safeAddColumn(db, 'workouts', 'share_code TEXT');
   safeAddColumn(db, 'vault_items', 'user_id INTEGER DEFAULT 1');
   safeAddColumn(db, 'vault_items', "doc_type TEXT DEFAULT 'credential'");
   safeAddColumn(db, 'vault_items', "doc_data TEXT DEFAULT '{}'");
   safeAddColumn(db, 'vault_items', "attachments TEXT DEFAULT '[]'");
+  safeAddColumn(db, 'fasting_sessions', 'user_id INTEGER DEFAULT 1');
+  safeAddColumn(db, 'gps_activities', 'user_id INTEGER DEFAULT 1');
 
   // Clean up any old demo user if exists
   try {
@@ -310,10 +347,33 @@ function createSchema(db: Database) {
     ];
 
     db.run(
-      `INSERT INTO workouts (user_id, title, description, days_json) VALUES (1, ?, ?, ?)`,
-      ['Rotina Semanal Hipertrofia (ABCD)', 'Programa semanal completo de musculação e condicionamento físico.', JSON.stringify(sampleWorkout)]
+      `INSERT INTO workouts (user_id, title, description, days_json, share_code) VALUES (1, ?, ?, ?, ?)`,
+      ['Rotina Semanal Hipertrofia (ABCD)', 'Programa semanal completo de musculação e condicionamento físico.', JSON.stringify(sampleWorkout), 'TRN-8A9K2']
     );
   }
+
+  // Ensure all existing workouts have a unique share_code
+  try {
+    const unseededWorkouts = db.exec('SELECT id FROM workouts WHERE share_code IS NULL OR share_code = ""');
+    if (unseededWorkouts.length > 0 && unseededWorkouts[0].values.length > 0) {
+      for (const row of unseededWorkouts[0].values) {
+        const id = row[0] as number;
+        const code = generateWorkoutShareCode();
+        db.run('UPDATE workouts SET share_code = ? WHERE id = ?', [code, id]);
+      }
+    }
+  } catch (e) {
+    // Ignore
+  }
+}
+
+export function generateWorkoutShareCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = 'TRN-';
+  for (let i = 0; i < 5; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
 }
 
 export function queryAll<T = any>(sql: string, params: any[] = []): T[] {

@@ -28,8 +28,11 @@ import {
   ExternalLink,
   ChevronRight,
   Smartphone,
+  Target,
+  Pencil,
 } from 'lucide-react';
 import { Note, FastingSession, TaskItem, User } from '../types';
+import { calculateFastingEnd } from '../lib/fastingUtils';
 import { DashboardGpsTrackerCard } from './DashboardGpsTrackerCard';
 
 interface UserDashboardViewProps {
@@ -222,7 +225,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
   };
 
   // Real or initial tasks
-  const [tasksList] = useState<TaskItem[]>(() => {
+  const [tasksList, setTasksList] = useState<TaskItem[]>(() => {
     try {
       const saved = localStorage.getItem('kb_tasks_list');
       if (saved) {
@@ -236,6 +239,35 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
       { id: '3', title: 'Revisar notas e relatórios semanais', completed: false, priority: 'Baixa', createdAt: new Date().toISOString() },
     ];
   });
+
+  useEffect(() => {
+    const handleTasksUpdate = () => {
+      try {
+        const saved = localStorage.getItem('kb_tasks_list');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) setTasksList(parsed);
+        }
+      } catch (e) {}
+    };
+
+    window.addEventListener('kb_tasks_updated', handleTasksUpdate);
+    window.addEventListener('storage', handleTasksUpdate);
+    return () => {
+      window.removeEventListener('kb_tasks_updated', handleTasksUpdate);
+      window.removeEventListener('storage', handleTasksUpdate);
+    };
+  }, []);
+
+  const handleToggleTaskInDashboard = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = tasksList.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t));
+    setTasksList(updated);
+    try {
+      localStorage.setItem('kb_tasks_list', JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('kb_tasks_updated', { detail: updated }));
+    } catch (err) {}
+  };
 
   const pendingTasksCount = tasksList.filter(t => !t.completed).length;
 
@@ -263,6 +295,12 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
 
   const targetSecs = (activeFastingSession?.target_hours || 16) * 3600;
   const fastingProgress = Math.min(100, Math.round((elapsedSeconds / targetSecs) * 100));
+
+  const dashboardEndEstimate = activeFastingSession && activeFastingSession.status === 'active'
+    ? calculateFastingEnd(activeFastingSession.start_time, activeFastingSession.target_hours)
+    : null;
+
+  const dashboardPreviewEnd = calculateFastingEnd(new Date(), selectedProtocolHours);
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6 animate-fade-in pb-16">
@@ -494,43 +532,74 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
 
         {/* B. Tarefas do Dia (1 Coluna) */}
         <div 
-          onClick={() => setCurrentTab('tasks')}
-          className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col justify-between space-y-4 group"
+          className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition flex flex-col justify-between space-y-4"
         >
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2.5 rounded-2xl bg-indigo-500/10 text-indigo-600 border border-indigo-500/20">
+            <div 
+              onClick={() => setCurrentTab('tasks')}
+              className="flex items-center gap-2.5 cursor-pointer group"
+            >
+              <div className="p-2.5 rounded-2xl bg-indigo-500/10 text-indigo-600 border border-indigo-500/20 group-hover:scale-105 transition">
                 <CheckSquare className="w-5 h-5" />
               </div>
               <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Tarefas Prioritárias</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 transition">Tarefas Prioritárias</span>
                 <div className="text-[11px] text-slate-400">{pendingTasksCount} a concluir</div>
               </div>
             </div>
-            <ArrowRight className="w-4 h-4 text-slate-400 group-hover:translate-x-1 transition" />
+            <button
+              onClick={() => setCurrentTab('tasks')}
+              className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1"
+            >
+              <span>Gerenciar / Editar</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
 
           <div className="space-y-2 flex-1">
-            {tasksList.slice(0, 4).map((t) => (
-              <div key={t.id} className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80">
-                <input type="checkbox" checked={t.completed} readOnly className="rounded border-slate-300 text-indigo-600 w-3.5 h-3.5" />
-                <span className={`truncate flex-1 ${t.completed ? 'line-through text-slate-400 font-normal' : 'font-semibold'}`}>
-                  {t.title}
-                </span>
-                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
-                  t.priority === 'Alta' ? 'bg-red-500/10 text-red-600' :
-                  t.priority === 'Média' ? 'bg-amber-500/10 text-amber-600' :
-                  'bg-slate-500/10 text-slate-500'
-                }`}>
-                  {t.priority || 'Normal'}
-                </span>
+            {tasksList.length > 0 ? (
+              tasksList.slice(0, 4).map((t) => (
+                <div 
+                  key={t.id} 
+                  onClick={() => setCurrentTab('tasks')}
+                  className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/80 hover:border-indigo-500/30 hover:bg-slate-100 dark:hover:bg-slate-800/70 transition cursor-pointer group"
+                  title="Clique para abrir e editar esta tarefa"
+                >
+                  <input 
+                    type="checkbox" 
+                    checked={t.completed} 
+                    onChange={(e) => handleToggleTaskInDashboard(t.id, e as any)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="rounded border-slate-300 text-indigo-600 w-3.5 h-3.5 cursor-pointer" 
+                  />
+                  <span className={`truncate flex-1 ${t.completed ? 'line-through text-slate-400 font-normal' : 'font-semibold text-slate-900 dark:text-white'}`}>
+                    {t.title}
+                  </span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                    t.priority === 'Alta' || t.priority === 'Urgente' ? 'bg-red-500/10 text-red-600' :
+                    t.priority === 'Média' ? 'bg-amber-500/10 text-amber-600' :
+                    'bg-slate-500/10 text-slate-500'
+                  }`}>
+                    {t.priority || 'Normal'}
+                  </span>
+                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold opacity-0 group-hover:opacity-100 transition flex items-center gap-0.5 shrink-0">
+                    <Pencil className="w-2.5 h-2.5" /> Editar
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 text-center text-xs text-slate-400">
+                Nenhuma tarefa criada. Clique abaixo para adicionar!
               </div>
-            ))}
+            )}
           </div>
 
-          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold flex items-center justify-between">
+          <div 
+            onClick={() => setCurrentTab('tasks')}
+            className="pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold flex items-center justify-between cursor-pointer hover:underline"
+          >
             <span>Quadro Geral de Tarefas</span>
-            <span>Gerenciar Tarefas →</span>
+            <span>+ Nova / Editar Tarefas →</span>
           </div>
         </div>
       </div>
@@ -560,7 +629,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
 
           <div className="space-y-3 flex-1">
             {activeFastingSession ? (
-              <div className="space-y-3 p-3 bg-orange-50/50 dark:bg-orange-950/20 rounded-2xl border border-orange-200/50 dark:border-orange-900/30">
+              <div className="space-y-3 p-3.5 bg-orange-50/60 dark:bg-orange-950/20 rounded-2xl border border-orange-200/60 dark:border-orange-900/30">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-orange-600 dark:text-orange-400 flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 animate-pulse" /> Jejum Ativo ({activeFastingSession.target_hours}h)
@@ -569,6 +638,18 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
                     {formatElapsedTime(elapsedSeconds)}
                   </span>
                 </div>
+
+                {dashboardEndEstimate && (
+                  <div className="px-3 py-2 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-orange-200 dark:border-orange-900/40 flex items-center justify-between text-xs">
+                    <span className="text-orange-700 dark:text-orange-300 font-semibold flex items-center gap-1.5">
+                      <Target className="w-3.5 h-3.5 text-orange-500" />
+                      Término:
+                    </span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                      {dashboardEndEstimate.dayLabel} às {dashboardEndEstimate.timeStr}
+                    </span>
+                  </div>
+                )}
 
                 <div className="space-y-1">
                   <div className="flex justify-between text-[10px] text-slate-400 font-semibold">
@@ -610,8 +691,11 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="text-xs text-slate-600 dark:text-slate-400">
-                  Selecione o protocolo e inicie sua janela de jejum:
+                <div className="text-xs text-slate-600 dark:text-slate-400 flex items-center justify-between">
+                  <span>Selecione o protocolo de jejum:</span>
+                  <span className="text-[11px] font-semibold text-orange-600 dark:text-orange-400">
+                    Termina: {dashboardPreviewEnd.dayLabel} às {dashboardPreviewEnd.timeStr}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2">
                   {[
@@ -638,7 +722,7 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
                     onClick={() => onStartFasting(selectedProtocolHours, `${selectedProtocolHours}:${24 - selectedProtocolHours}`)}
                     className="w-full py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-bold text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <Play className="w-3.5 h-3.5 fill-white" /> Iniciar Protocolo ({selectedProtocolHours}h)
+                    <Play className="w-3.5 h-3.5 fill-white" /> Iniciar ({selectedProtocolHours}h) • Término {dashboardPreviewEnd.timeStr}
                   </button>
                 )}
               </div>
@@ -652,7 +736,10 @@ export const UserDashboardView: React.FC<UserDashboardViewProps> = ({
         </div>
 
         {/* B. Telemetria GPS & Passômetro (Dados Reais do APK) */}
-        <DashboardGpsTrackerCard onOpenAndroidApp={() => setCurrentTab('android')} />
+        <DashboardGpsTrackerCard
+          onOpenAndroidApp={() => setCurrentTab('android')}
+          onOpenTelemetry={() => setCurrentTab('telemetry')}
+        />
       </div>
 
       {/* 5. SEÇÃO DE INFORMAÇÕES AMBIENTAIS & NOTÍCIAS */}

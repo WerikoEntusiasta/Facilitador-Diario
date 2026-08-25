@@ -82,8 +82,23 @@ export const TasksView: React.FC = () => {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+      window.dispatchEvent(new CustomEvent('kb_tasks_updated', { detail: tasks }));
     } catch (e) {}
   }, [tasks]);
+
+  useEffect(() => {
+    const handleSync = (e: any) => {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) setTasks(parsed);
+        }
+      } catch (err) {}
+    };
+    window.addEventListener('storage', handleSync);
+    return () => window.removeEventListener('storage', handleSync);
+  }, []);
 
   const handleOpenCreateModal = () => {
     setEditingTaskId(null);
@@ -297,7 +312,11 @@ export const TasksView: React.FC = () => {
                 {/* Left checkbox & details */}
                 <div className="flex items-start gap-3.5 min-w-0 flex-1">
                   <button
-                    onClick={() => handleToggleTask(task.id)}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleTask(task.id);
+                    }}
                     className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition flex-shrink-0 mt-0.5"
                     title={task.completed ? 'Marcar como pendente' : 'Marcar como concluída'}
                   >
@@ -308,9 +327,13 @@ export const TasksView: React.FC = () => {
                     )}
                   </button>
 
-                  <div className="min-w-0 flex-1 space-y-1">
+                  <div
+                    onClick={() => handleOpenEditModal(task)}
+                    className="min-w-0 flex-1 space-y-1 cursor-pointer"
+                    title="Clique para editar esta tarefa"
+                  >
                     <p
-                      className={`text-xs sm:text-sm font-semibold break-words ${
+                      className={`text-xs sm:text-sm font-semibold break-words hover:text-indigo-600 dark:hover:text-indigo-400 transition ${
                         task.completed ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'
                       }`}
                     >
@@ -341,6 +364,9 @@ export const TasksView: React.FC = () => {
                           <Calendar className="w-3 h-3" /> {task.dueDate}
                         </span>
                       )}
+                      <span className="text-[10px] text-indigo-500 dark:text-indigo-400 font-medium opacity-0 group-hover:opacity-100 transition flex items-center gap-0.5">
+                        <Pencil className="w-2.5 h-2.5" /> Editar
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -349,10 +375,11 @@ export const TasksView: React.FC = () => {
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button
                     onClick={() => handleOpenEditModal(task)}
-                    className="p-2 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-400 transition"
+                    className="p-2 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-400 transition flex items-center gap-1 text-xs font-semibold"
                     title="Editar tarefa"
                   >
-                    <Pencil className="w-4 h-4" />
+                    <Pencil className="w-4 h-4 text-indigo-500" />
+                    <span className="hidden sm:inline">Editar</span>
                   </button>
                   <button
                     onClick={() => handleDeleteTask(task.id)}

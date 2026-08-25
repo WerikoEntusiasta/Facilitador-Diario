@@ -11,9 +11,11 @@ import {
   Circle,
   Calendar,
   Sparkles,
+  Target,
 } from 'lucide-react';
 import { FastingSession, TaskItem } from '../../types';
 import { apiGetWorkouts } from '../../lib/api';
+import { calculateFastingEnd } from '../../lib/fastingUtils';
 
 interface CombinedWidgetProps {
   activeSession: FastingSession | null;
@@ -57,6 +59,12 @@ export const CombinedWidget: React.FC<CombinedWidgetProps> = ({
   const progressPercent = Math.min(100, (elapsedSeconds / targetSec) * 100);
   const remainingSec = Math.max(0, targetSec - elapsedSeconds);
 
+  const endEstimate = activeSession && activeSession.status === 'active'
+    ? calculateFastingEnd(activeSession.start_time, activeSession.target_hours)
+    : null;
+
+  const previewEnd = calculateFastingEnd(new Date(), 16);
+
   const formatHMS = (totalSec: number) => {
     const h = Math.floor(totalSec / 3600);
     const m = Math.floor((totalSec % 3600) / 60);
@@ -87,10 +95,28 @@ export const CombinedWidget: React.FC<CombinedWidgetProps> = ({
     }
   });
 
+  useEffect(() => {
+    const handleSync = () => {
+      try {
+        const saved = localStorage.getItem('kb_tasks_list');
+        if (saved) setTasks(JSON.parse(saved));
+      } catch (err) {}
+    };
+    window.addEventListener('kb_tasks_updated', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('kb_tasks_updated', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, []);
+
   const toggleTask = (id: string) => {
     const updated = tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
     setTasks(updated);
-    localStorage.setItem('kb_tasks_list', JSON.stringify(updated));
+    try {
+      localStorage.setItem('kb_tasks_list', JSON.stringify(updated));
+      window.dispatchEvent(new CustomEvent('kb_tasks_updated', { detail: updated }));
+    } catch (err) {}
   };
 
   const pendingTasks = tasks.filter(t => !t.completed).slice(0, 3);
@@ -159,6 +185,11 @@ export const CombinedWidget: React.FC<CombinedWidgetProps> = ({
               <div>
                 <span className="text-[10px] uppercase font-bold text-indigo-300 block">Jejum Intermitente</span>
                 <span className="text-sm font-mono font-bold">{activeSession ? formatHMS(remainingSec) : 'Nenhum jejum ativo'}</span>
+                {endEstimate && (
+                  <span className="text-[10px] text-amber-300 font-semibold block">
+                    Término: {endEstimate.dayLabel} às {endEstimate.timeStr}
+                  </span>
+                )}
               </div>
             </div>
             {activeSession ? (
@@ -171,9 +202,11 @@ export const CombinedWidget: React.FC<CombinedWidgetProps> = ({
             ) : (
               <button
                 onClick={() => onStartFasting(16, '16:8 Padrão')}
-                className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold"
+                className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-semibold flex flex-col items-center"
+                title={`Terminará ${previewEnd.dayLabel} às ${previewEnd.timeStr}`}
               >
-                Iniciar 16h
+                <span>Iniciar 16h</span>
+                <span className="text-[9px] text-indigo-200">até {previewEnd.timeStr}</span>
               </button>
             )}
           </div>
@@ -216,6 +249,11 @@ export const CombinedWidget: React.FC<CombinedWidgetProps> = ({
               <span className="text-[10px] text-indigo-300 font-bold uppercase block">Jejum Ativo</span>
               <div className="text-xl font-mono font-black">{activeSession ? formatHMS(remainingSec) : 'Inativo'}</div>
               <p className="text-[11px] text-slate-400">Meta: {activeSession?.target_hours || 16}h ({Math.floor(progressPercent)}%)</p>
+              {endEstimate && (
+                <span className="text-[10px] text-amber-300 font-semibold block mt-0.5">
+                  🏁 Término: {endEstimate.dayLabel} às {endEstimate.timeStr}
+                </span>
+              )}
             </div>
             {activeSession ? (
               <div className="flex items-center gap-2">

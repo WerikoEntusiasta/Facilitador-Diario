@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, Droplets, Volume2, Sparkles, CheckCircle2, Clock, Shield, Flame, Dumbbell } from 'lucide-react';
+import { Play, Square, Droplets, Volume2, Sparkles, CheckCircle2, Clock, Shield, Flame, Dumbbell, Calendar, Target } from 'lucide-react';
 import { FastingSession } from '../types';
 import { playFastingCompletionSound, requestFastingNotificationPermission, sendFastingCompletionNotification } from '../lib/fastingSound';
+import { calculateFastingEnd } from '../lib/fastingUtils';
 import { apiGetWorkouts } from '../lib/api';
 
 interface FastingWidgetProps {
@@ -70,6 +71,10 @@ export const FastingWidget: React.FC<FastingWidgetProps> = ({
 
   const remainingSeconds = Math.max(0, targetSeconds - elapsedSeconds);
   const isFinished = elapsedSeconds >= targetSeconds && activeSession?.status === 'active';
+
+  const endEstimate = activeSession && activeSession.status === 'active'
+    ? calculateFastingEnd(activeSession.start_time, activeSession.target_hours)
+    : null;
 
   const [todayWorkout, setTodayWorkout] = useState<{
     routineTitle: string;
@@ -153,6 +158,11 @@ export const FastingWidget: React.FC<FastingWidgetProps> = ({
             <div className="text-lg font-black font-mono">
               {activeSession && activeSession.status === 'active' ? formatHMS(remainingSeconds) : 'Inativo'}
             </div>
+            {endEstimate && (
+              <span className="text-[10px] text-amber-300 font-medium block">
+                Término: {endEstimate.dayLabel} {endEstimate.timeStr}
+              </span>
+            )}
           </div>
           <div className="text-right">
             <span className="text-[11px] text-emerald-300 font-semibold block">
@@ -190,6 +200,20 @@ export const FastingWidget: React.FC<FastingWidgetProps> = ({
                   <span className="absolute text-[11px] font-bold text-indigo-200">{Math.floor(progressPercent)}%</span>
                 </div>
               </div>
+
+              {/* End Time Badge */}
+              {endEstimate && (
+                <div className="px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between text-xs">
+                  <span className="text-amber-300 font-semibold flex items-center gap-1.5">
+                    <Target className="w-3.5 h-3.5 text-amber-400" />
+                    Término Previsto:
+                  </span>
+                  <span className="font-bold text-amber-200">
+                    {endEstimate.dayLabel} às {endEstimate.timeStr}
+                  </span>
+                </div>
+              )}
+
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => onAddWater(250)}
@@ -215,19 +239,26 @@ export const FastingWidget: React.FC<FastingWidgetProps> = ({
                   { hours: 12, label: '12h' },
                   { hours: 16, label: '16h' },
                   { hours: 18, label: '18h' },
-                ].map((preset) => (
-                  <button
-                    key={preset.hours}
-                    onClick={() => {
-                      requestFastingNotificationPermission();
-                      onStartFasting(preset.hours, `${preset.hours}h Intermitente`);
-                    }}
-                    className="py-2 px-2 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/30 rounded-xl text-xs font-bold text-indigo-200 flex flex-col items-center justify-center gap-0.5 transition"
-                  >
-                    <Play className="w-3 h-3 text-emerald-400 fill-current" />
-                    <span>{preset.label}</span>
-                  </button>
-                ))}
+                ].map((preset) => {
+                  const preview = calculateFastingEnd(new Date(), preset.hours);
+                  return (
+                    <button
+                      key={preset.hours}
+                      onClick={() => {
+                        requestFastingNotificationPermission();
+                        onStartFasting(preset.hours, `${preset.hours}h Intermitente`);
+                      }}
+                      className="py-2 px-1.5 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/30 rounded-xl text-xs font-bold text-indigo-200 flex flex-col items-center justify-center gap-0.5 transition"
+                      title={`Término: ${preview.dayLabel} às ${preview.timeStr}`}
+                    >
+                      <Play className="w-3 h-3 text-emerald-400 fill-current" />
+                      <span>{preset.label}</span>
+                      <span className="text-[9px] text-amber-300/90 font-normal">
+                        até {preview.timeStr}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -263,26 +294,47 @@ export const FastingWidget: React.FC<FastingWidgetProps> = ({
       {widgetSize === 'detailed' && (
         <div className="space-y-4">
           {activeSession && activeSession.status === 'active' ? (
-            <div className="flex items-center justify-between bg-white/5 backdrop-blur-md p-4 rounded-2xl border border-white/10">
-              <div>
-                <span className="text-[10px] font-semibold uppercase text-indigo-300 block mb-0.5">
-                  {isFinished ? '🎉 Meta Alcançada!' : 'Tempo Restante'}
-                </span>
-                <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white">
-                  {isFinished ? '00:00:00' : formatHMS(remainingSeconds)}
+            <>
+              <div className="flex items-center justify-between bg-white/5 backdrop-blur-md p-4 rounded-2xl border border-white/10">
+                <div>
+                  <span className="text-[10px] font-semibold uppercase text-indigo-300 block mb-0.5">
+                    {isFinished ? '🎉 Meta Alcançada!' : 'Tempo Restante'}
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-white">
+                    {isFinished ? '00:00:00' : formatHMS(remainingSeconds)}
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Decorrido: <span className="text-emerald-400 font-medium">{formatHMS(elapsedSeconds)}</span> (Meta: {activeSession.target_hours}h)
+                  </p>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Decorrido: <span className="text-emerald-400 font-medium">{formatHMS(elapsedSeconds)}</span> (Meta: {activeSession.target_hours}h)
-                </p>
+                <div className="relative w-16 h-16 flex items-center justify-center">
+                  <svg className="w-16 h-16 transform -rotate-90">
+                    <circle cx="32" cy="32" r="26" stroke="currentColor" strokeWidth="5" className="text-slate-800" fill="transparent" />
+                    <circle cx="32" cy="32" r="26" stroke="currentColor" strokeWidth="5" strokeDasharray={2 * Math.PI * 26} strokeDashoffset={2 * Math.PI * 26 * (1 - progressPercent / 100)} className="text-indigo-400" strokeLinecap="round" fill="transparent" />
+                  </svg>
+                  <span className="absolute text-xs font-bold text-indigo-200">{Math.floor(progressPercent)}%</span>
+                </div>
               </div>
-              <div className="relative w-16 h-16 flex items-center justify-center">
-                <svg className="w-16 h-16 transform -rotate-90">
-                  <circle cx="32" cy="32" r="26" stroke="currentColor" strokeWidth="5" className="text-slate-800" fill="transparent" />
-                  <circle cx="32" cy="32" r="26" stroke="currentColor" strokeWidth="5" strokeDasharray={2 * Math.PI * 26} strokeDashoffset={2 * Math.PI * 26 * (1 - progressPercent / 100)} className="text-indigo-400" strokeLinecap="round" fill="transparent" />
-                </svg>
-                <span className="absolute text-xs font-bold text-indigo-200">{Math.floor(progressPercent)}%</span>
-              </div>
-            </div>
+
+              {/* Detailed Schedule Box */}
+              {endEstimate && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-3 space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-[11px] text-slate-300 font-semibold">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                      Início: {new Date(activeSession.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="flex items-center gap-1 text-amber-300 font-bold">
+                      <Target className="w-3.5 h-3.5 text-amber-400" />
+                      Término: {endEstimate.dayLabel} às {endEstimate.timeStr}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-amber-200/80 text-right">
+                    {endEstimate.fullDateStr}
+                  </div>
+                </div>
+              )}
+            </>
           ) : (
             <div className="space-y-2">
               <p className="text-xs text-slate-300 font-semibold">Iniciar protocolo de jejum:</p>
@@ -291,19 +343,26 @@ export const FastingWidget: React.FC<FastingWidgetProps> = ({
                   { hours: 12, label: '12h Iniciante' },
                   { hours: 16, label: '16h Padrão' },
                   { hours: 18, label: '18h Avançado' },
-                ].map((preset) => (
-                  <button
-                    key={preset.hours}
-                    onClick={() => {
-                      requestFastingNotificationPermission();
-                      onStartFasting(preset.hours, `${preset.hours}h Protocolo`);
-                    }}
-                    className="py-2 px-2 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/30 rounded-xl text-xs font-bold text-indigo-200 flex flex-col items-center justify-center gap-0.5 transition"
-                  >
-                    <Play className="w-3.5 h-3.5 text-emerald-400 fill-current" />
-                    <span>{preset.label}</span>
-                  </button>
-                ))}
+                ].map((preset) => {
+                  const preview = calculateFastingEnd(new Date(), preset.hours);
+                  return (
+                    <button
+                      key={preset.hours}
+                      onClick={() => {
+                        requestFastingNotificationPermission();
+                        onStartFasting(preset.hours, `${preset.hours}h Protocolo`);
+                      }}
+                      className="py-2.5 px-2 bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/30 rounded-xl text-xs font-bold text-indigo-200 flex flex-col items-center justify-center gap-1 transition"
+                      title={`Término: ${preview.dayLabel} às ${preview.timeStr}`}
+                    >
+                      <Play className="w-3.5 h-3.5 text-emerald-400 fill-current" />
+                      <span>{preset.label}</span>
+                      <span className="text-[9px] text-amber-300/90 font-normal">
+                        término {preview.dayLabel} {preview.timeStr}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

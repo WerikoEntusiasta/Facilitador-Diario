@@ -24,5 +24,28 @@
   "display": "standalone",
   "orientation": "portrait",
   "scope": "/",
-  "description": "Seu bloco de notas, quadros Kanban e leitor de PDFs com sincronização em tempo real"
+  "description": "Seu bloco de notas, quadros Kanban e leitor de PDFs com sincronização em tempo real",
+  "shortcuts": [
+    {
+      "name": "Criar Nota Rápida (Widget)",
+      "short_name": "Nota Rápida",
+      "description": "Criar uma nota instantaneamente sem abrir o app completo",
+      "url": "/?action=quick_note",
+      "icons": [{ "src": "/logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Widget de Notas",
+      "short_name": "Widget Notas",
+      "description": "Abrir o widget de notas da tela inicial",
+      "url": "/?widget=quick_note",
+      "icons": [{ "src": "/logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Jejum Intermitente",
+      "short_name": "Jejum",
+      "description": "Controlar jejum e hidratação",
+      "url": "/?tab=fasting",
+      "icons": [{ "src": "/logo.png", "sizes": "192x192" }]
+    }
+  ]
 }

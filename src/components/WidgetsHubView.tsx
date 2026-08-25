@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { Sparkles, Bell, Layers, CheckSquare, Dumbbell, Flame, Calendar, Smartphone } from 'lucide-react';
+import { Sparkles, Bell, Layers, CheckSquare, Dumbbell, Flame, Calendar, Smartphone, FileText, Plus } from 'lucide-react';
 import { CombinedWidget } from './widgets/CombinedWidget';
 import { TasksWidget } from './widgets/TasksWidget';
 import { WorkoutWidgetComponent } from './widgets/WorkoutWidgetComponent';
 import { CalendarRemindersWidget } from './widgets/CalendarRemindersWidget';
+import { QuickNoteWidget } from './widgets/QuickNoteWidget';
 import { FastingWidget } from './FastingWidget';
 import { FastingSession } from '../types';
 import { AndroidWidgetCodeModal } from './AndroidWidgetCodeModal';
+import { AndroidHomeScreenGuideModal } from './AndroidHomeScreenGuideModal';
 
 interface WidgetsHubViewProps {
   activeSession: FastingSession | null;
@@ -14,6 +16,7 @@ interface WidgetsHubViewProps {
   onEndFasting: () => void;
   onAddWater: (ml: number) => void;
   onOpenNotificationModal: () => void;
+  onOpenStandaloneWidget?: () => void;
 }
 
 export const WidgetsHubView: React.FC<WidgetsHubViewProps> = ({
@@ -22,8 +25,10 @@ export const WidgetsHubView: React.FC<WidgetsHubViewProps> = ({
   onEndFasting,
   onAddWater,
   onOpenNotificationModal,
+  onOpenStandaloneWidget,
 }) => {
   const [isAndroidModalOpen, setIsAndroidModalOpen] = useState(false);
+  const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-12">
@@ -34,24 +39,33 @@ export const WidgetsHubView: React.FC<WidgetsHubViewProps> = ({
             <Layers className="w-4 h-4 text-indigo-400" />
             <span>Central de Widgets Interativos & Nativos Android</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Widgets com Múltiplos Tamanhos</h1>
-          <p className="text-xs text-slate-300 mt-1">Escolha entre Mínimo, Padrão ou Expandido para cada widget do seu aplicativo ou consulte o código AppWidget nativo Android.</p>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Widgets da Tela Inicial do Celular</h1>
+          <p className="text-xs text-slate-300 mt-1">
+            Crie notas rápidas, acompanhe treinos e controle jejum direto da tela de início sem abrir o app completo.
+          </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center flex-wrap gap-2">
           <button
-            onClick={() => setIsAndroidModalOpen(true)}
-            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg transition"
+            onClick={() => setIsGuideModalOpen(true)}
+            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg transition cursor-pointer"
           >
             <Smartphone className="w-4 h-4" />
-            <span>Código Nativo Android</span>
+            <span>Como Fixar no Android</span>
+          </button>
+          <button
+            onClick={() => setIsAndroidModalOpen(true)}
+            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs flex items-center gap-2 border border-white/10 transition cursor-pointer"
+          >
+            <Layers className="w-4 h-4" />
+            <span>Código Kotlin / XML</span>
           </button>
           <button
             onClick={onOpenNotificationModal}
-            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg transition"
+            className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 shadow-lg transition cursor-pointer"
           >
             <Bell className="w-4 h-4" />
-            <span>Notificações & DND</span>
+            <span>Notificações</span>
           </button>
         </div>
       </div>
@@ -61,8 +75,35 @@ export const WidgetsHubView: React.FC<WidgetsHubViewProps> = ({
         onClose={() => setIsAndroidModalOpen(false)}
       />
 
+      <AndroidHomeScreenGuideModal
+        isOpen={isGuideModalOpen}
+        onClose={() => setIsGuideModalOpen(false)}
+        onOpenStandaloneWidget={onOpenStandaloneWidget}
+      />
+
       {/* Widgets Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* 0. Quick Note Widget (Hero Feature) */}
+        <div className="space-y-2 lg:col-span-2">
+          <div className="flex items-center justify-between px-1 text-xs font-bold text-slate-700 dark:text-slate-300">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-emerald-500" />
+              <span>Widget de Criação de Nota Rápida (Tela Inicial do Celular)</span>
+            </div>
+            <button
+              onClick={() => setIsGuideModalOpen(true)}
+              className="text-emerald-600 dark:text-emerald-400 hover:underline font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+            >
+              <Smartphone size={12} />
+              <span>Instruções para Celular Android</span>
+            </button>
+          </div>
+          <QuickNoteWidget
+            onOpenGuideModal={() => setIsGuideModalOpen(true)}
+            onOpenStandaloneWidget={onOpenStandaloneWidget}
+          />
+        </div>
+
         {/* 1. Combined Widget */}
         <div className="space-y-2">
           <div className="flex items-center gap-2 px-1 text-xs font-bold text-slate-700 dark:text-slate-300">

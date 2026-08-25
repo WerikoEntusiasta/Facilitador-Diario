@@ -1,22 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Download, QrCode, Database, CheckCircle2, ShieldCheck, Wifi, ExternalLink, Sparkles, User, Box, Play, Laptop, ChevronRight, Server, Flame, Layers, Bell } from 'lucide-react';
+import { Smartphone, Download, QrCode, Database, CheckCircle2, ShieldCheck, Wifi, ExternalLink, Sparkles, User, Box, Play, Laptop, ChevronRight, Server, Flame, Layers, Bell, FileText, Plus } from 'lucide-react';
 import { User as UserType } from '../types';
 import { AndroidWidgetCodeModal } from './AndroidWidgetCodeModal';
+import { AndroidHomeScreenGuideModal } from './AndroidHomeScreenGuideModal';
 
 interface AndroidAppViewProps {
   currentUser: UserType | null;
   onOpenAuth: () => void;
   onOpenServerSettings?: () => void;
   onOpenNotificationModal?: () => void;
+  onOpenStandaloneWidget?: () => void;
 }
 
-export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onOpenAuth, onOpenServerSettings, onOpenNotificationModal }) => {
+export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onOpenAuth, onOpenServerSettings, onOpenNotificationModal, onOpenStandaloneWidget }) => {
   const isAdmin = currentUser?.is_admin === 1;
   const [simulatorView, setSimulatorView] = useState<'notes' | 'kanban' | 'widget' | 'tracker' | 'sync'>('widget');
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [installSuccess, setInstallSuccess] = useState(false);
   const [isWidgetModalOpen, setIsWidgetModalOpen] = useState(false);
+  const [isHomeScreenGuideOpen, setIsHomeScreenGuideOpen] = useState(false);
 
   const appUrl = window.location.href;
 
@@ -109,6 +112,14 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
             )}
 
             <button
+              onClick={() => setIsHomeScreenGuideOpen(true)}
+              className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 text-white font-bold rounded-xl text-xs shadow-lg transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Smartphone className="w-4 h-4 text-emerald-200" />
+              Widget Nota Rápida (Tela Inicial)
+            </button>
+
+            <button
               onClick={() => setIsWidgetModalOpen(true)}
               className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs shadow-lg transition-all flex items-center gap-2 cursor-pointer"
             >
@@ -132,6 +143,12 @@ export const AndroidAppView: React.FC<AndroidAppViewProps> = ({ currentUser, onO
       <AndroidWidgetCodeModal
         isOpen={isWidgetModalOpen}
         onClose={() => setIsWidgetModalOpen(false)}
+      />
+
+      <AndroidHomeScreenGuideModal
+        isOpen={isHomeScreenGuideOpen}
+        onClose={() => setIsHomeScreenGuideOpen(false)}
+        onOpenStandaloneWidget={onOpenStandaloneWidget}
       />
 
       {/* Main Grid: Features & Simulator */}
